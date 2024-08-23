@@ -1,5 +1,4 @@
 # Greenscreens.ai homework
-## Task 1.
 You should predict rate per mile using your model, features etc.
 
 Example code returns average rate as prediction, it gives 34.85% accuracy.
@@ -16,8 +15,3 @@ The dataset contains the following features: the number of miles of the route, t
 Try to beat our prediction accuracy (MAPE), we are expecting less than 9%.
 
 Please send estimate your validation MAPE, the predictions for the test.csv and don't forget to attach your code.
-
-
-## Task 2.
-
-Think and propose your version of a asymmetric MAPE-Like Metric. This asymmetry should be adjustable through the introduction of an additional parameter, allowing for fine-tuning of the metric's sensitivity to overestimations and underestimations. Consider the advantages, disadvantages, and limitations of using such a metric.
