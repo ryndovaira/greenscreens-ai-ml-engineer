@@ -16,7 +16,8 @@ Try to beat our prediction accuracy (MAPE), we are expecting less than 9%.
 
 Please send estimate your validation MAPE, the predictions for the test.csv and don't forget to attach your code.
 
-**Bonuses:**
+### Bonuses:
+
 If you’d like, you can choose one of the following optional tasks (they are not mandatory):
 - Conduct a deeper research/analysis and present an EDA notebook.
 - Refactor your code to make it well-structured, clear, and easy to read.
