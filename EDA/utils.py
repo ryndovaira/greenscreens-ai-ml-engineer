@@ -10,8 +10,9 @@ train_path = data_dir / "train.csv"
 validation_path = data_dir / "validation.csv"
 test_path = data_dir / "test.csv"
 eda_train_path = eda_data_dir / "train.csv"
+eda_validation_path = eda_data_dir / "validation.csv"
+
 
 train_df = pd.read_csv(train_path)
 validation_df = pd.read_csv(validation_path)
 test_df = pd.read_csv(test_path)
-eda_train_df = pd.read_csv(train_path)
