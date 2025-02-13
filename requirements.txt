@@ -1,3 +1,9 @@
 pandas
 numpy
 joblib
+ydata_profiling
+seaborn
+plotly
+matplotlib
+jupyterlab
+scikit-learn
