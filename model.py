@@ -1,10 +1,67 @@
+import numpy as np
+from lightgbm import LGBMRegressor
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, FunctionTransformer
+from xgboost import XGBRegressor
+
+
 class Model:
-    def __init__(self):
-        self.mean_rate = None
+    def __init__(self, model_type='random_forest'):
+        self.model_type = model_type
+        self.pipeline = None
+        self.best_model = None
 
-    def fit(self, x, y):
-        self.mean_rate = y.mean()
-        return self
+    def build_pipeline(self, numerical_features):
+        """
+        Build a full pipeline with preprocessing and the model.
+        """
+        # Numerical preprocessing pipeline: Imputation, Scaling, Log Transform
+        numerical_transformer = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='median')),
+            ('log_transform', FunctionTransformer(np.log1p, validate=True)),
+            ('scaler', StandardScaler())
+        ])
 
-    def predict(self, x):
-        return [self.mean_rate] * len(x)
+        # Combine transformers
+        preprocessor = ColumnTransformer(transformers=[
+            ('num', numerical_transformer, numerical_features)
+        ])
+
+        # Select model
+        if self.model_type == 'random_forest':
+            model = RandomForestRegressor(random_state=42)
+        elif self.model_type == 'xgboost':
+            model = XGBRegressor(random_state=42, eval_metric='mae', n_jobs=-1)
+        elif self.model_type == 'lightgbm':
+            model = LGBMRegressor(random_state=42, n_jobs=-1)
+        else:
+            raise ValueError("Unsupported model_type. Choose 'random_forest', 'xgboost', or 'lightgbm'.")
+
+        # Build pipeline
+        self.pipeline = Pipeline(steps=[
+            ('preprocessor', preprocessor),
+            ('regressor', model)
+        ])
+
+    def fit(self, X, y, param_grid=None):
+        """
+        Train the model with optional hyperparameter tuning.
+        """
+        if param_grid:
+            grid_search = GridSearchCV(self.pipeline, param_grid, cv=5, scoring='neg_mean_absolute_percentage_error', n_jobs=-1)
+            grid_search.fit(X, y)
+            self.best_model = grid_search.best_estimator_
+            print(f"Best Params for {self.model_type}: {grid_search.best_params_}")
+        else:
+            self.pipeline.fit(X, y)
+            self.best_model = self.pipeline
+
+    def predict(self, X):
+        """
+        Make predictions using the trained pipeline.
+        """
+        return self.best_model.predict(X)
