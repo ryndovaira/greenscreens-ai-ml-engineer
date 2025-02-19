@@ -32,13 +32,7 @@ def train_and_validate(model_type):
 
     # Hyperparameter grid
     param_grid = {}
-    if model_type == "random_forest":
-        param_grid = {
-            "regressor__n_estimators": [100, 200],
-            "regressor__max_depth": [10, 20, None],
-            "regressor__min_samples_split": [2, 5],
-        }
-    elif model_type == "xgboost":
+    if model_type == "xgboost":
         param_grid = {
             "regressor__n_estimators": [100, 200],
             "regressor__max_depth": [3, 6, 10],
@@ -84,7 +78,7 @@ def generate_final_solution(best_model_type):
     ]
 
     model = Model(model_type=best_model_type)
-    model.build_pipeline(features)
+    model.build_pipeline(features, ["origin_kma", "destination_kma", "kma_interaction"])
     model.fit(df[features], df["rate"])
 
     # generate and save test predictions
@@ -96,7 +90,7 @@ def generate_final_solution(best_model_type):
 
 
 if __name__ == "__main__":
-    models = ["random_forest", "xgboost", "lightgbm"]
+    models = ["xgboost", "lightgbm"]
     results = {}
 
     for model_type in tqdm(models, desc="Training Models"):

@@ -2,7 +2,6 @@ import numpy as np
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
@@ -14,7 +13,7 @@ import lightgbm as lgb
 
 
 class Model:
-    def __init__(self, model_type="random_forest"):
+    def __init__(self, model_type="xgboost"):
         self.model_type = model_type
         self.pipeline = None
         self.best_model = None
@@ -23,7 +22,6 @@ class Model:
         """
         Build a pipeline with preprocessing, target encoding, and the model.
         """
-
         # Numerical preprocessing pipeline: Imputation, Scaling, Log Transform
         numerical_transformer = Pipeline(
             steps=[
@@ -44,9 +42,7 @@ class Model:
             ]
         )
 
-        if self.model_type == "random_forest":
-            model = RandomForestRegressor(random_state=42)
-        elif self.model_type == "xgboost":
+        if self.model_type == "xgboost":
             try:
                 if xgb.rabit.get_rank() >= 0:  # Check for GPU
                     model = XGBRegressor(
@@ -78,9 +74,7 @@ class Model:
                 print("GPU not available. Using CPU for LightGBM.")
 
         else:
-            raise ValueError(
-                "Unsupported model_type. Choose 'random_forest', 'xgboost', or 'lightgbm'."
-            )
+            raise ValueError("Unsupported model_type. Choose 'xgboost' or 'lightgbm'.")
 
         print(f"Building pipeline for {self.model_type} model...")
         # Build pipeline
