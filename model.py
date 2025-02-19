@@ -42,13 +42,18 @@ class Model:
             ]
         )
 
-        # Select model
         if self.model_type == "random_forest":
-            model = RandomForestRegressor(random_state=42)
+            model = RandomForestRegressor(random_state=42)  # CPU-based
         elif self.model_type == "xgboost":
-            model = XGBRegressor(random_state=42, eval_metric="mae", n_jobs=-1)
+            model = XGBRegressor(
+                random_state=42,
+                eval_metric="mae",
+                n_jobs=-1,
+                tree_method="gpu_hist",  # Enable GPU
+                predictor="gpu_predictor",
+            )
         elif self.model_type == "lightgbm":
-            model = LGBMRegressor(random_state=42, n_jobs=-1)
+            model = LGBMRegressor(random_state=42, n_jobs=-1, device="gpu")  # Enable GPU
         else:
             raise ValueError(
                 "Unsupported model_type. Choose 'random_forest', 'xgboost', or 'lightgbm'."
