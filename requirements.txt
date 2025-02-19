@@ -7,3 +7,5 @@ plotly
 matplotlib
 jupyterlab
 scikit-learn
+xgboost
+lightgbm
