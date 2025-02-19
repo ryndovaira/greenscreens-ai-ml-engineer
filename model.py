@@ -1,14 +1,16 @@
 import numpy as np
 from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, FunctionTransformer
-from xgboost import XGBRegressor
 from category_encoders import TargetEncoder
 from tqdm import tqdm
+import xgboost as xgb
+import lightgbm as lgb
 
 
 class Model:
@@ -43,17 +45,38 @@ class Model:
         )
 
         if self.model_type == "random_forest":
-            model = RandomForestRegressor(random_state=42)  # CPU-based
+            model = RandomForestRegressor(random_state=42)
         elif self.model_type == "xgboost":
-            model = XGBRegressor(
-                random_state=42,
-                eval_metric="mae",
-                n_jobs=-1,
-                tree_method="gpu_hist",  # Enable GPU
-                predictor="gpu_predictor",
-            )
+            try:
+                if xgb.rabit.get_rank() >= 0:  # Check for GPU
+                    model = XGBRegressor(
+                        random_state=42,
+                        eval_metric="mae",
+                        n_jobs=-1,
+                        tree_method="gpu_hist",
+                        predictor="gpu_predictor",
+                    )
+                    print("Using GPU for XGBoost.")
+                else:
+                    raise ValueError
+            except:
+                model = XGBRegressor(
+                    random_state=42,
+                    eval_metric="mae",
+                    n_jobs=-1,
+                    tree_method="hist",
+                    predictor="cpu_predictor",
+                )
+                print("GPU not available. Using CPU for XGBoost.")
+
         elif self.model_type == "lightgbm":
-            model = LGBMRegressor(random_state=42, n_jobs=-1, device="gpu")  # Enable GPU
+            try:
+                model = LGBMRegressor(random_state=42, n_jobs=-1, device="gpu")
+                print("Using GPU for LightGBM.")
+            except:
+                model = LGBMRegressor(random_state=42, n_jobs=-1, device="cpu")
+                print("GPU not available. Using CPU for LightGBM.")
+
         else:
             raise ValueError(
                 "Unsupported model_type. Choose 'random_forest', 'xgboost', or 'lightgbm'."
