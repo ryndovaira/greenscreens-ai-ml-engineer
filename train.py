@@ -15,7 +15,7 @@ def add_interaction_features(df):
     return df
 
 
-def train_and_validate(model_type):
+def train_and_validate():
     df = pd.read_csv("dataset/train.csv")
 
     # Define features
@@ -26,24 +26,14 @@ def train_and_validate(model_type):
     df["kma_interaction"] = df["origin_kma"] + "_" + df["destination_kma"]
     df["miles_weight_interaction"] = df["valid_miles"] * df["weight"]
 
-    model = Model(model_type=model_type)
-    print(f"Training {model_type} model...")
+    model = Model()
     model.build_pipeline(numerical_features, categorical_features)
 
     # Hyperparameter grid
-    param_grid = {}
-    if model_type == "xgboost":
-        param_grid = {
-            "regressor__n_estimators": [100, 200],
-            "regressor__max_depth": [3, 6, 10],
-            "regressor__learning_rate": [0.01, 0.1],
-            "regressor__subsample": [0.8, 1.0],
-        }
-    elif model_type == "lightgbm":
-        param_grid = {
-            "regressor__n_estimators": [100, 200],
-            "regressor__max_depth": [3, 6, 10],
-            "regressor__learning_rate": [0.01, 0.1],
+    param_grid = {
+            "regressor__n_estimators": [100, 200, 300],
+            "regressor__max_depth": [ 6, 10, 12, 15],
+            "regressor__learning_rate": [0.8, 0.1, 0.12, 0.18],
             "regressor__subsample": [0.8, 1.0],
         }
 
@@ -57,7 +47,7 @@ def train_and_validate(model_type):
 
     predicted_rates = model.predict(df_val)
     mape = loss(df_val["rate"], predicted_rates)
-    print(f"Validation MAPE for {model_type}: {mape}%")
+    print(f"Validation MAPE: {mape}%")
     return mape
 
 
@@ -90,16 +80,10 @@ def generate_final_solution(best_model_type):
 
 
 if __name__ == "__main__":
-    models = ["xgboost", "lightgbm"]
-    results = {}
-
-    for model_type in tqdm(models, desc="Training Models"):
-        mape = train_and_validate(model_type)
-        results[model_type] = mape
+    mape = train_and_validate()
 
     # Select best model
-    best_model = min(results, key=results.get)
-    print(f"Best Model: {best_model} with MAPE: {results[best_model]}%")
+    print(f"Best MAPE: {mape}%")
 
     if results[best_model] < 9:  # try to reach 9% or less for validation
         generate_final_solution(best_model)
