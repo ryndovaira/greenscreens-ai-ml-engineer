@@ -6,7 +6,7 @@ from category_encoders import TargetEncoder
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_percentage_error
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 from xgboost import XGBRegressor
@@ -93,11 +93,15 @@ class Model:
         prefixed_params = {f"regressor__{key}": value for key, value in params.items()}
         self.pipeline.set_params(**prefixed_params)
 
+        rate_buckets = pd.qcut(y, q=6, labels=False, duplicates='drop')
+
         # Cross-validation loop with MAPE
         mape_scores = []
-        kf = KFold(n_splits=5, shuffle=True, random_state=42)
+        # kf = KFold(n_splits=5, shuffle=True, random_state=42)
+        stratified_kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-        for train_index, valid_index in kf.split(X):
+        # for train_index, valid_index in kf.split(X):
+        for train_index, valid_index in stratified_kf.split(X, rate_buckets):
             X_train, X_valid = X.iloc[train_index], X.iloc[valid_index]
             y_train, y_valid = y.iloc[train_index], y.iloc[valid_index]
 
