@@ -23,14 +23,19 @@ def train_and_validate():
     df = add_interaction_features(df)
 
     # Define features
-    numerical_features = ["valid_miles",
-                          "weight",
-                          "miles_weight_interaction", "month", "day_of_week", "hour"
-                          ]
-    categorical_features = ["origin_kma",
-                            "destination_kma",
-                            "kma_interaction"
-                            ]
+    numerical_features = [
+        "valid_miles",
+        # "weight",
+        # "miles_weight_interaction",
+        "month",
+        "day_of_week",
+        "hour"
+    ]
+    categorical_features = [
+        "origin_kma",
+        "destination_kma",
+        "kma_interaction"
+    ]
 
     model = Model()
     model.build_pipeline(numerical_features, categorical_features)
