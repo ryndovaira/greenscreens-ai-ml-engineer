@@ -8,20 +8,28 @@ def loss(real_rates, predicted_rates):
     return np.average(abs(predicted_rates / real_rates - 1.0)) * 100.0
 
 
-
+def add_interaction_features(df):
+    """
+    Adds interaction features to the dataframe.
+    """
+    df["miles_weight_interaction"] = df["valid_miles"] * df["weight"]
+    df["kma_interaction"] = df["origin_kma"] + "_" + df["destination_kma"]
+    return df
 
 def train_and_validate():
     df = pd.read_csv("dataset/train.csv")
     df = df.dropna().drop_duplicates()
+    df["rate"] = np.log1p(df["rate"])
+    df = add_interaction_features(df)
 
     # Define features
     numerical_features = ["valid_miles",
                           "weight",
-                          # "miles_weight_interaction"
+                          "miles_weight_interaction"
                           ]
     categorical_features = ["origin_kma",
                             "destination_kma",
-                            # "kma_interaction"
+                            "kma_interaction"
                             ]
 
     model = Model()
@@ -31,8 +39,13 @@ def train_and_validate():
     model.fit(df, df["rate"], n_trials=5)
 
     df = pd.read_csv('dataset/validation.csv')
-    predicted_rates = model.predict(df)
-    mape = loss(df.rate, predicted_rates)
+    df["rate"] = np.log1p(df["rate"])
+    df = add_interaction_features(df)
+    predicted_log_rates  = model.predict(df)
+    predicted_rates = np.expm1(predicted_log_rates)
+    real_rates = np.expm1(df["rate"])
+
+    mape = loss(real_rates, predicted_rates)
     mape = np.round(mape, 2)
     return mape
 
@@ -42,14 +55,18 @@ def generate_final_solution():
     df = pd.read_csv("dataset/train.csv")
     df_val = pd.read_csv("dataset/validation.csv")
     df = df.append(df_val).reset_index(drop=True)
+    df["rate"] = np.log1p(df["rate"])
+    df = add_interaction_features(df)
 
     model = Model()
     model.load_model()
+    # fit again!
 
     # generate and save test predictions
     df_test = pd.read_csv("dataset/test.csv")
-    # df_test = add_interaction_features(df_test)
-    df_test["predicted_rate"] = model.predict(df_test)
+    df_test = add_interaction_features(df_test)
+    predicted_log_rates  = model.predict(df_test)
+    df_test["predicted_rate"] = np.expm1(predicted_log_rates)
     df_test.to_csv("dataset/predicted.csv", index=False)
 
 
