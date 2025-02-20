@@ -26,13 +26,6 @@ def train_and_validate():
     model = Model()
     model.build_pipeline(numerical_features, categorical_features)
 
-    # param_grid = {
-    #         "regressor__n_estimators": [200, 300, 400],
-    #         "regressor__max_depth": [10, 12, 15],
-    #         "regressor__learning_rate": [0.1, 0.12, 0.18],
-    #         "regressor__subsample": [0.8, 1.0],
-    #     }
-
     param_grid = {
         "regressor__n_estimators": [250, 300, 350],
         "regressor__max_depth": [12,],
