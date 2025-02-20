@@ -27,13 +27,8 @@ def train_and_validate():
     model = Model()
     model.build_pipeline(numerical_features, categorical_features)
 
-    param_grid = {
-        "regressor__n_estimators": [250, 300, 350],
-        "regressor__max_depth": [12,],
-        "regressor__learning_rate": [0.12,],
-        "regressor__subsample": [1.0,],
-    }
-    model.fit(df, df["rate"], param_grid=param_grid)
+    # Best Params : {'regressor__learning_rate': 0.12, 'regressor__max_depth': 12, 'regressor__n_estimators': 250, 'regressor__subsample': 1.0}
+    model.fit(df, df["rate"], n_trials=5)
 
     df = pd.read_csv('dataset/validation.csv')
     predicted_rates = model.predict(df)

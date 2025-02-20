@@ -1,8 +1,10 @@
 import joblib
 import numpy as np
+import optuna
 from category_encoders import TargetEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 from xgboost import XGBRegressor
@@ -45,22 +47,55 @@ class Model:
 
         self.pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("regressor", model)])
 
-    def fit(self, X, y, param_grid):
+    def optuna_objective(self, trial, X, y):
+        """
+        Optuna objective function using raw MAPE as the optimization target.
+        """
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 100, 500),
+            "max_depth": trial.suggest_int("max_depth", 4, 15),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "gamma": trial.suggest_float("gamma", 0, 10),
+            "reg_alpha": trial.suggest_float("reg_alpha", 0, 5),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0, 5),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
+        }
+
+        prefixed_params = {f"regressor__{key}": value for key, value in params.items()}
+        self.pipeline.set_params(**prefixed_params)
+
+        # Cross-validation loop with MAPE
+        mape_scores = []
+        kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+        for train_index, valid_index in kf.split(X):
+            X_train, X_valid = X.iloc[train_index], X.iloc[valid_index]
+            y_train, y_valid = y.iloc[train_index], y.iloc[valid_index]
+
+            self.pipeline.fit(X_train, y_train)
+            preds = self.pipeline.predict(X_valid)
+            mape = mean_absolute_percentage_error(y_valid, preds) * 100  # MAPE in percentage
+            mape_scores.append(mape)
+
+        avg_mape = np.mean(mape_scores)
+        return avg_mape  # Optuna will minimize this value
+
+    def fit(self, X, y, n_trials=50):
         """
         Train the model with optional hyperparameter tuning and tqdm progress.
         """
-        grid_search = GridSearchCV(
-            self.pipeline,
-            param_grid,
-            cv=5,
-            scoring="neg_mean_absolute_percentage_error",
-            n_jobs=-1,
-            verbose=3,
-        )
-        grid_search.fit(X, y)
-        self.best_model = grid_search.best_estimator_
-        self.best_params = grid_search.best_params_
-        print(f"Best Params : {grid_search.best_params_}")
+        study = optuna.create_study(direction="minimize")
+        study.optimize(lambda trial: self.optuna_objective(trial, X, y), n_trials=n_trials)
+
+        self.best_params = study.best_params
+        print(f"Best Params : {self.best_params}")
+
+        prefixed_params = {f"regressor__{key}": value for key, value in self.best_params.items()}
+        self.pipeline.set_params(**prefixed_params)
+        self.pipeline.fit(X, y)
+        self.best_model = self.pipeline
 
         self.save_model()
 
