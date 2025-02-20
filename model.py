@@ -6,12 +6,13 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, FunctionTransformer
 from xgboost import XGBRegressor
-
+import joblib
 
 class Model:
     def __init__(self):
         self.pipeline = None
         self.best_model = None
+        self.best_params = None
 
     def build_pipeline(self, numerical_features, categorical_features):
         """
@@ -39,32 +40,48 @@ class Model:
 
         model = XGBRegressor(
                     random_state=42,
-                    eval_metric="mae",
+                    eval_metric="mape",
                     n_jobs=-1,
                     tree_method="hist",
                 )
 
         self.pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("regressor", model)])
 
-    def fit(self, X, y, param_grid=None):
+    def fit(self, X, y, param_grid):
         """
         Train the model with optional hyperparameter tuning and tqdm progress.
         """
-        if param_grid:
-            grid_search = GridSearchCV(
-                self.pipeline,
-                param_grid,
-                cv=5,
-                scoring="neg_mean_absolute_percentage_error",
-                n_jobs=-1,
-                verbose=3,
-            )
-            grid_search.fit(X, y)
-            self.best_model = grid_search.best_estimator_
-            print(f"Best Params : {grid_search.best_params_}")
-        else:
-            self.pipeline.fit(X, y)
-            self.best_model = self.pipeline
+        grid_search = GridSearchCV(
+            self.pipeline,
+            param_grid,
+            cv=5,
+            scoring="neg_mean_absolute_percentage_error",
+            n_jobs=-1,
+            verbose=3,
+        )
+        grid_search.fit(X, y)
+        self.best_model = grid_search.best_estimator_
+        self.best_params = grid_search.best_params_
+        print(f"Best Params : {grid_search.best_params_}")
+
+        self.save_model()
+
 
     def predict(self, X):
         return self.best_model.predict(X)
+
+    def save_model(self, model_path="best_model.joblib", params_path="best_params.joblib"):
+        """
+        Save the trained model and best parameters.
+        """
+        joblib.dump(self.best_model, model_path)
+        joblib.dump(self.best_params, params_path)
+        print("Model and parameters saved.")
+
+    def load_model(self, model_path="best_model.joblib", params_path="best_params.joblib"):
+        """
+        Load the trained model and parameters.
+        """
+        self.best_model = joblib.load(model_path)
+        self.best_params = joblib.load(params_path)
+        print("Model and parameters loaded.")
