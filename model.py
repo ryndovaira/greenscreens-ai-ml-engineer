@@ -1,13 +1,37 @@
+import optuna
 import joblib
 import numpy as np
-import optuna
+import pandas as pd
 from category_encoders import TargetEncoder
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_percentage_error
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 from xgboost import XGBRegressor
+
+
+class TemporalFeaturesExtractor(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer to extract temporal features from 'pickup_date'.
+    """
+    def __init__(self, datetime_col="pickup_date"):
+        self.datetime_col = datetime_col
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X_original):
+        X = X_original.copy()
+        X[self.datetime_col] = pd.to_datetime(X[self.datetime_col])
+
+        # Extract temporal features
+        X["month"] = X[self.datetime_col].dt.month
+        X["day_of_week"] = X[self.datetime_col].dt.dayofweek
+        X["hour"] = X[self.datetime_col].dt.hour
+
+        return X.drop(columns=[self.datetime_col])
 
 
 class Model:
@@ -45,7 +69,10 @@ class Model:
                     tree_method="hist",
                 )
 
-        self.pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("regressor", model)])
+        self.pipeline = Pipeline(steps=[
+            ("temporal_features", TemporalFeaturesExtractor(datetime_col="pickup_date")),
+            ("preprocessor", preprocessor),
+            ("regressor", model)])
 
     def optuna_objective(self, trial, X, y):
         """
