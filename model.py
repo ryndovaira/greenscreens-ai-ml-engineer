@@ -1,12 +1,12 @@
+import joblib
 import numpy as np
 from category_encoders import TargetEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, FunctionTransformer
+from sklearn.preprocessing import FunctionTransformer
 from xgboost import XGBRegressor
-import joblib
+
 
 class Model:
     def __init__(self):
@@ -21,9 +21,7 @@ class Model:
         # Numerical preprocessing pipeline: Imputation, Scaling, Log Transform
         numerical_transformer = Pipeline(
             steps=[
-                ("imputer", SimpleImputer(strategy="median")),
                 ("log_transform", FunctionTransformer(np.log1p, validate=True)),
-                ("scaler", StandardScaler()),
             ]
         )
 
