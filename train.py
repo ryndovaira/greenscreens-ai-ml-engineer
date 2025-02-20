@@ -12,6 +12,7 @@ def loss(real_rates, predicted_rates):
 
 def train_and_validate():
     df = pd.read_csv("dataset/train.csv")
+    df = df.dropna().drop_duplicates()
 
     # Define features
     numerical_features = ["valid_miles",
