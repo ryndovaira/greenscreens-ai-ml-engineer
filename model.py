@@ -32,6 +32,16 @@ class TemporalFeaturesExtractor(BaseEstimator, TransformerMixin):
         X["day_of_week"] = X[self.datetime_col].dt.dayofweek
         X["hour"] = X[self.datetime_col].dt.hour
 
+        # Apply cyclic encoding for temporal features
+        X["month_sin"] = np.sin(2 * np.pi * X["month"] / 12)
+        X["month_cos"] = np.cos(2 * np.pi * X["month"] / 12)
+
+        X["day_of_week_sin"] = np.sin(2 * np.pi * X["day_of_week"] / 7)
+        X["day_of_week_cos"] = np.cos(2 * np.pi * X["day_of_week"] / 7)
+
+        X["hour_sin"] = np.sin(2 * np.pi * X["hour"] / 24)
+        X["hour_cos"] = np.cos(2 * np.pi * X["hour"] / 24)
+
         return X.drop(columns=[self.datetime_col])
 
 
@@ -44,6 +54,7 @@ class Model:
     def build_pipeline(
         self,
         numerical_features: list,
+        temporal_features: list,
         high_cardinality_categorical_features: list,
         low_cardinality_categorical_features: list,
     ):
@@ -57,6 +68,9 @@ class Model:
             ]
         )
 
+        # Temporal features don't need any transformation
+        temporal_transformer = "passthrough"
+
         # Categorical preprocessing pipeline: Target Encoding
         target_transformer = Pipeline(steps=[("target_encoder", TargetEncoder())])
 
@@ -68,6 +82,7 @@ class Model:
         preprocessor = ColumnTransformer(
             transformers=[
                 ("numerical", numerical_transformer, numerical_features),
+                ("temporal", temporal_transformer, temporal_features),
                 ("target", target_transformer, high_cardinality_categorical_features),
                 ("onehot", one_hot_transformer, low_cardinality_categorical_features),
             ]

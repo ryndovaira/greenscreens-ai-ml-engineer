@@ -28,21 +28,30 @@ def train_and_validate():
         "valid_miles",
         "weight",
         # "miles_weight_interaction",
-        "month",
-        "day_of_week",
-        "hour",
+    ]
+
+    temporal_features = [
+        "month_sin",
+        "month_cos",
+        "day_of_week_sin",
+        "day_of_week_cos",
+        "hour_sin",
+        "hour_cos",
+        # "month", "day_of_week", "hour"  #  raw time features
     ]
     high_cardinality_categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
 
     low_cardinality_categorical_features = ["transport_type"]
 
     print(f"Numerical Features: {numerical_features}")
+    print(f"Temporal Features: {temporal_features}")
     print(f"High Cardinality Categorical Features: {high_cardinality_categorical_features}")
     print(f"Low Cardinality Categorical Features: {low_cardinality_categorical_features}")
 
     model = Model()
     model.build_pipeline(
         numerical_features=numerical_features,
+        temporal_features=temporal_features,
         high_cardinality_categorical_features=high_cardinality_categorical_features,
         low_cardinality_categorical_features=low_cardinality_categorical_features,
     )
