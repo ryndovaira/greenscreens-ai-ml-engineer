@@ -32,10 +32,20 @@ def train_and_validate():
         "day_of_week",
         "hour",
     ]
-    categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
+    high_cardinality_categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
+
+    low_cardinality_categorical_features = ["transport_type"]
+
+    print(f"Numerical Features: {numerical_features}")
+    print(f"High Cardinality Categorical Features: {high_cardinality_categorical_features}")
+    print(f"Low Cardinality Categorical Features: {low_cardinality_categorical_features}")
 
     model = Model()
-    model.build_pipeline(numerical_features, categorical_features)
+    model.build_pipeline(
+        numerical_features=numerical_features,
+        high_cardinality_categorical_features=high_cardinality_categorical_features,
+        low_cardinality_categorical_features=low_cardinality_categorical_features,
+    )
 
     # Best Params : {'regressor__learning_rate': 0.12, 'regressor__max_depth': 12, 'regressor__n_estimators': 250, 'regressor__subsample': 1.0}
     model.fit(df, df["rate"], n_trials=5)

@@ -8,7 +8,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_percentage_error
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 from xgboost import XGBRegressor
 
 
@@ -41,7 +41,12 @@ class Model:
         self.best_model = None
         self.best_params = None
 
-    def build_pipeline(self, numerical_features, categorical_features):
+    def build_pipeline(
+        self,
+        numerical_features: list,
+        high_cardinality_categorical_features: list,
+        low_cardinality_categorical_features: list,
+    ):
         """
         Build a pipeline with preprocessing, target encoding, and the model.
         """
@@ -53,13 +58,18 @@ class Model:
         )
 
         # Categorical preprocessing pipeline: Target Encoding
-        categorical_transformer = Pipeline(steps=[("target_encoder", TargetEncoder())])
+        target_transformer = Pipeline(steps=[("target_encoder", TargetEncoder())])
+
+        one_hot_transformer = Pipeline(
+            steps=[("one_hot_encoder", OneHotEncoder(handle_unknown="ignore"))]
+        )
 
         # Combine numerical and categorical transformers
         preprocessor = ColumnTransformer(
             transformers=[
-                ("num", numerical_transformer, numerical_features),
-                ("cat", categorical_transformer, categorical_features),
+                ("numerical", numerical_transformer, numerical_features),
+                ("target", target_transformer, high_cardinality_categorical_features),
+                ("onehot", one_hot_transformer, low_cardinality_categorical_features),
             ]
         )
 
@@ -112,9 +122,9 @@ class Model:
             self.pipeline.fit(
                 X_train,
                 y_train,
-                regressor__eval_set=[(X_valid, y_valid)],
-                regressor__early_stopping_rounds=50,
-                regressor__verbose=False,
+                # regressor__eval_set=[(X_valid, y_valid)],
+                # regressor__early_stopping_rounds=50,
+                # regressor__verbose=False,
             )
             preds = self.pipeline.predict(X_valid)
             mape = mean_absolute_percentage_error(y_valid, preds) * 100  # MAPE in percentage
