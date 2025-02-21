@@ -8,6 +8,27 @@ def loss(real_rates, predicted_rates):
     return np.average(abs(predicted_rates / real_rates - 1.0)) * 100.0
 
 
+def detect_outliers_percentile(df, column, percentile=99.7):
+    """
+    Detects outliers based on the given percentile.
+    """
+    threshold = np.percentile(df[column], percentile)
+    return df[column] > threshold
+
+
+def add_custom_features(df):
+    """
+    Adds custom features like is_round_trip and is_rate_outlier.
+    """
+    # is_round_trip: True if origin and destination are the same
+    df["is_round_trip"] = df["destination_kma"] == df["origin_kma"]
+
+    # is_rate_outlier: True if rate is in the top 0.3%
+    df["is_rate_outlier"] = detect_outliers_percentile(df, column="rate", percentile=99.7)
+
+    return df
+
+
 def add_interaction_features(df):
     """
     Adds interaction features to the dataframe.
@@ -22,26 +43,33 @@ def train_and_validate():
     df = df.dropna().drop_duplicates()
     df["rate"] = np.log1p(df["rate"])
     df = add_interaction_features(df)
+    df = add_custom_features(df)
 
     # Define features
     numerical_features = [
-        "valid_miles",
-        "weight",
-        # "miles_weight_interaction",
+        # "valid_miles",
+        # "weight",
+        "miles_weight_interaction",
     ]
 
     temporal_features = [
-        "month_sin",
-        "month_cos",
-        "day_of_week_sin",
-        "day_of_week_cos",
-        "hour_sin",
-        "hour_cos",
-        # "month", "day_of_week", "hour"  #  raw time features
+        # "month_sin",
+        # "month_cos",
+        # "day_of_week_sin",
+        # "day_of_week_cos",
+        # "hour_sin",
+        # "hour_cos",
+        # "month",
+        # "day_of_week",
+        "hour"
     ]
     high_cardinality_categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
 
-    low_cardinality_categorical_features = ["transport_type"]
+    low_cardinality_categorical_features = [
+        "transport_type",
+        "is_round_trip",
+        "is_rate_outlier",
+    ]
 
     print(f"Numerical Features: {numerical_features}")
     print(f"Temporal Features: {temporal_features}")
@@ -62,6 +90,7 @@ def train_and_validate():
     df = pd.read_csv("dataset/validation.csv")
     df["rate"] = np.log1p(df["rate"])
     df = add_interaction_features(df)
+    df = add_custom_features(df)
     predicted_log_rates = model.predict(df)
     predicted_rates = np.expm1(predicted_log_rates)
     real_rates = np.expm1(df["rate"])
@@ -78,6 +107,7 @@ def generate_final_solution():
     df = df.append(df_val).reset_index(drop=True)
     df["rate"] = np.log1p(df["rate"])
     df = add_interaction_features(df)
+    df = add_custom_features(df)
 
     model = Model()
     model.load_model()
@@ -86,6 +116,7 @@ def generate_final_solution():
     # generate and save test predictions
     df_test = pd.read_csv("dataset/test.csv")
     df_test = add_interaction_features(df_test)
+    df_test = add_custom_features(df_test)
     predicted_log_rates = model.predict(df_test)
     df_test["predicted_rate"] = np.expm1(predicted_log_rates)
     df_test.to_csv("dataset/predicted.csv", index=False)
