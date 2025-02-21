@@ -26,7 +26,7 @@ def train_and_validate():
     # Define features
     numerical_features = [
         "valid_miles",
-        # "weight",
+        "weight",
         # "miles_weight_interaction",
         "month",
         "day_of_week",
