@@ -16,6 +16,7 @@ def add_interaction_features(df):
     df["kma_interaction"] = df["origin_kma"] + "_" + df["destination_kma"]
     return df
 
+
 def train_and_validate():
     df = pd.read_csv("dataset/train.csv")
     df = df.dropna().drop_duplicates()
@@ -29,13 +30,9 @@ def train_and_validate():
         # "miles_weight_interaction",
         "month",
         "day_of_week",
-        "hour"
+        "hour",
     ]
-    categorical_features = [
-        "origin_kma",
-        "destination_kma",
-        "kma_interaction"
-    ]
+    categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
 
     model = Model()
     model.build_pipeline(numerical_features, categorical_features)
@@ -43,10 +40,10 @@ def train_and_validate():
     # Best Params : {'regressor__learning_rate': 0.12, 'regressor__max_depth': 12, 'regressor__n_estimators': 250, 'regressor__subsample': 1.0}
     model.fit(df, df["rate"], n_trials=5)
 
-    df = pd.read_csv('dataset/validation.csv')
+    df = pd.read_csv("dataset/validation.csv")
     df["rate"] = np.log1p(df["rate"])
     df = add_interaction_features(df)
-    predicted_log_rates  = model.predict(df)
+    predicted_log_rates = model.predict(df)
     predicted_rates = np.expm1(predicted_log_rates)
     real_rates = np.expm1(df["rate"])
 
@@ -70,7 +67,7 @@ def generate_final_solution():
     # generate and save test predictions
     df_test = pd.read_csv("dataset/test.csv")
     df_test = add_interaction_features(df_test)
-    predicted_log_rates  = model.predict(df_test)
+    predicted_log_rates = model.predict(df_test)
     df_test["predicted_rate"] = np.expm1(predicted_log_rates)
     df_test.to_csv("dataset/predicted.csv", index=False)
 
@@ -78,7 +75,7 @@ def generate_final_solution():
 if __name__ == "__main__":
     mape = train_and_validate()
 
-    print(f'Accuracy of validation is {mape}%')
+    print(f"Accuracy of validation is {mape}%")
 
     if mape < 9:  # try to reach 9% or less for validation
         generate_final_solution()
