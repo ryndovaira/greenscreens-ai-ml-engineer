@@ -16,6 +16,7 @@ class TemporalFeaturesExtractor(BaseEstimator, TransformerMixin):
     """
     Custom transformer to extract temporal features from 'pickup_date'.
     """
+
     def __init__(self, datetime_col="pickup_date"):
         self.datetime_col = datetime_col
 
@@ -63,16 +64,19 @@ class Model:
         )
 
         model = XGBRegressor(
-                    random_state=42,
-                    eval_metric="mape",
-                    n_jobs=-1,
-                    tree_method="hist",
-                )
+            random_state=42,
+            eval_metric="mape",
+            n_jobs=-1,
+            tree_method="hist",
+        )
 
-        self.pipeline = Pipeline(steps=[
-            ("temporal_features", TemporalFeaturesExtractor(datetime_col="pickup_date")),
-            ("preprocessor", preprocessor),
-            ("regressor", model)])
+        self.pipeline = Pipeline(
+            steps=[
+                ("temporal_features", TemporalFeaturesExtractor(datetime_col="pickup_date")),
+                ("preprocessor", preprocessor),
+                ("regressor", model),
+            ]
+        )
 
     def optuna_objective(self, trial, X, y):
         """
@@ -93,19 +97,25 @@ class Model:
         prefixed_params = {f"regressor__{key}": value for key, value in params.items()}
         self.pipeline.set_params(**prefixed_params)
 
-        rate_buckets = pd.qcut(y, q=6, labels=False, duplicates='drop')
+        # rate_buckets = pd.qcut(y, q=6, labels=False, duplicates='drop')
+        # stratified_kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
         # Cross-validation loop with MAPE
         mape_scores = []
-        # kf = KFold(n_splits=5, shuffle=True, random_state=42)
-        stratified_kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-        # for train_index, valid_index in kf.split(X):
-        for train_index, valid_index in stratified_kf.split(X, rate_buckets):
+        for train_index, valid_index in kf.split(X):
+            # for train_index, valid_index in stratified_kf.split(X, rate_buckets):
             X_train, X_valid = X.iloc[train_index], X.iloc[valid_index]
             y_train, y_valid = y.iloc[train_index], y.iloc[valid_index]
 
-            self.pipeline.fit(X_train, y_train)
+            self.pipeline.fit(
+                X_train,
+                y_train,
+                regressor__eval_set=[(X_valid, y_valid)],
+                regressor__early_stopping_rounds=50,
+                regressor__verbose=False,
+            )
             preds = self.pipeline.predict(X_valid)
             mape = mean_absolute_percentage_error(y_valid, preds) * 100  # MAPE in percentage
             mape_scores.append(mape)
@@ -129,7 +139,6 @@ class Model:
         self.best_model = self.pipeline
 
         self.save_model()
-
 
     def predict(self, X):
         return self.best_model.predict(X)
