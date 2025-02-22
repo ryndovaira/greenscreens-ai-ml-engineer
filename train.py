@@ -81,9 +81,7 @@ def train_and_validate():
     high_cardinality_categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
 
     low_cardinality_categorical_features = [
-        "transport_type",
-        "is_round_trip",
-        "is_rate_outlier",
+        # "transport_type",
         "is_kma_equal",
         # "is_rate_outlier",
     ]
