@@ -1,8 +1,8 @@
-import optuna
 import joblib
 import numpy as np
+import optuna
 import pandas as pd
-from category_encoders import TargetEncoder
+from category_encoders import CatBoostEncoder
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_percentage_error
@@ -64,49 +64,6 @@ class TemporalFeaturesExtractor(BaseEstimator, TransformerMixin):
         return X.drop(columns=[self.datetime_col])
 
 
-class BinningTransformer(BaseEstimator, TransformerMixin):
-    """
-    Bins specified numerical features into quantiles after log-transform.
-    """
-
-    def __init__(self, columns, num_bins=8):
-        self.columns = columns
-        self.num_bins = num_bins
-        self.bin_edges_ = {}
-
-    def fit(self, X, y=None):
-        for col in self.columns:
-            self.bin_edges_[col] = pd.qcut(
-                X[col], q=self.num_bins, retbins=True, duplicates="drop"
-            )[1]
-        return self
-
-    def transform(self, X):
-        X = X.copy()
-        for col in self.columns:
-            X[f"{col}_bin"] = pd.cut(
-                X[col], bins=self.bin_edges_[col], labels=False, include_lowest=True
-            )
-        return X
-
-
-class SafeTargetEncoder(BaseEstimator, TransformerMixin):
-    """
-    Target Encoder that handles unseen categories gracefully.
-    """
-
-    def __init__(self):
-        self.encoder = TargetEncoder()
-
-    def fit(self, X, y):
-        self.encoder.fit(X, y)
-        return self
-
-    def transform(self, X):
-        X_transformed = self.encoder.transform(X)
-        return X_transformed.fillna(self.encoder.mapping.mean())
-
-
 class Model:
     def __init__(self):
         self.pipeline = None
@@ -131,8 +88,8 @@ class Model:
             ]
         )
 
-        # Categorical preprocessing pipeline: Target Encoding
-        target_transformer = Pipeline(steps=[("target_encoder", SafeTargetEncoder())])
+        # Categorical preprocessing pipeline
+        catboost_transformer = Pipeline(steps=[("catboost_encoder", CatBoostEncoder())])
 
         one_hot_transformer = Pipeline(
             steps=[("one_hot_encoder", OneHotEncoder(handle_unknown="ignore"))]
@@ -143,7 +100,7 @@ class Model:
             transformers=[
                 ("numerical", numerical_transformer, numerical_features),
                 ("temporal", "passthrough", temporal_features),
-                ("target", target_transformer, high_cardinality_categorical_features),
+                ("catboost", catboost_transformer, high_cardinality_categorical_features),
                 ("onehot", one_hot_transformer, low_cardinality_categorical_features),
             ]
         )

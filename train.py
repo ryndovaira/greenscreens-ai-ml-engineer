@@ -57,9 +57,9 @@ def train_and_validate():
 
     # Define features
     numerical_features = [
-        # "valid_miles",
-        # "weight",
-        "miles_weight_interaction",
+        "valid_miles",
+        "weight",
+        # "miles_weight_interaction",
     ]
 
     temporal_features = [
@@ -69,21 +69,16 @@ def train_and_validate():
         # "day_of_week_cos",
         # "hour_sin",
         # "hour_cos",
-        # "month",
-        # "day_of_week",
-        # "hour",
-        "season_num"
+        "month",
+        "day_of_week",
+        "hour",
+        "season_num",
     ]
-    high_cardinality_categorical_features = [
-        "origin_kma",
-        "destination_kma",
-        # "kma_interaction"
-    ]
+    high_cardinality_categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
 
     low_cardinality_categorical_features = [
         "transport_type",
-        # "is_kma_equal",
-        # "is_rate_outlier",
+        "is_kma_equal",
     ]
 
     print(f"Numerical Features: {numerical_features}")
