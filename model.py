@@ -42,7 +42,69 @@ class TemporalFeaturesExtractor(BaseEstimator, TransformerMixin):
         X["hour_sin"] = np.sin(2 * np.pi * X["hour"] / 24)
         X["hour_cos"] = np.cos(2 * np.pi * X["hour"] / 24)
 
+        X["season"] = X["month"].map(
+            {
+                12: "winter",
+                1: "winter",
+                2: "winter",
+                3: "spring",
+                4: "spring",
+                5: "spring",
+                6: "summer",
+                7: "summer",
+                8: "summer",
+                9: "autumn",
+                10: "autumn",
+                11: "autumn",
+            }
+        )
+        season_mapping = {"winter": 0, "spring": 1, "summer": 2, "autumn": 3}
+        X["season_num"] = X["season"].map(season_mapping)
+
         return X.drop(columns=[self.datetime_col])
+
+
+class BinningTransformer(BaseEstimator, TransformerMixin):
+    """
+    Bins specified numerical features into quantiles after log-transform.
+    """
+
+    def __init__(self, columns, num_bins=8):
+        self.columns = columns
+        self.num_bins = num_bins
+        self.bin_edges_ = {}
+
+    def fit(self, X, y=None):
+        for col in self.columns:
+            self.bin_edges_[col] = pd.qcut(
+                X[col], q=self.num_bins, retbins=True, duplicates="drop"
+            )[1]
+        return self
+
+    def transform(self, X):
+        X = X.copy()
+        for col in self.columns:
+            X[f"{col}_bin"] = pd.cut(
+                X[col], bins=self.bin_edges_[col], labels=False, include_lowest=True
+            )
+        return X
+
+
+class SafeTargetEncoder(BaseEstimator, TransformerMixin):
+    """
+    Target Encoder that handles unseen categories gracefully.
+    """
+
+    def __init__(self):
+        self.encoder = TargetEncoder()
+
+    def fit(self, X, y):
+        self.encoder.fit(X, y)
+        return self
+
+    def transform(self, X):
+        X_transformed = self.encoder.transform(X)
+        return X_transformed.fillna(self.encoder.mapping.mean())
 
 
 class Model:
@@ -65,14 +127,12 @@ class Model:
         numerical_transformer = Pipeline(
             steps=[
                 ("log_transform", FunctionTransformer(np.log1p, validate=True)),
+                ("binning", BinningTransformer(columns=numerical_features, num_bins=8)),
             ]
         )
 
-        # Temporal features don't need any transformation
-        temporal_transformer = "passthrough"
-
         # Categorical preprocessing pipeline: Target Encoding
-        target_transformer = Pipeline(steps=[("target_encoder", TargetEncoder())])
+        target_transformer = Pipeline(steps=[("target_encoder", SafeTargetEncoder())])
 
         one_hot_transformer = Pipeline(
             steps=[("one_hot_encoder", OneHotEncoder(handle_unknown="ignore"))]
@@ -82,7 +142,7 @@ class Model:
         preprocessor = ColumnTransformer(
             transformers=[
                 ("numerical", numerical_transformer, numerical_features),
-                ("temporal", temporal_transformer, temporal_features),
+                ("temporal", "passthrough", temporal_features),
                 ("target", target_transformer, high_cardinality_categorical_features),
                 ("onehot", one_hot_transformer, low_cardinality_categorical_features),
             ]

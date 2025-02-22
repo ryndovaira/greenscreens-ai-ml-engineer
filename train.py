@@ -71,13 +71,18 @@ def train_and_validate():
         # "hour_cos",
         # "month",
         # "day_of_week",
-        "hour"
+        # "hour",
+        "season_num"
     ]
-    high_cardinality_categorical_features = ["origin_kma", "destination_kma", "kma_interaction"]
+    high_cardinality_categorical_features = [
+        "origin_kma",
+        "destination_kma",
+        # "kma_interaction"
+    ]
 
     low_cardinality_categorical_features = [
-        # "transport_type",
-        "is_kma_equal",
+        "transport_type",
+        # "is_kma_equal",
         # "is_rate_outlier",
     ]
 
