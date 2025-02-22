@@ -8,14 +8,6 @@ def loss(real_rates, predicted_rates):
     return np.average(abs(predicted_rates / real_rates - 1.0)) * 100.0
 
 
-def detect_outliers_percentile(df, column, percentile=99.98):
-    """
-    Detects outliers based on the given percentile.
-    """
-    threshold = np.percentile(df[column], percentile)
-    return df[column] > threshold
-
-
 def remove_outliers(df, column, percentile=99.98):
     """
     Removes rows where values exceed the specified percentile threshold.
