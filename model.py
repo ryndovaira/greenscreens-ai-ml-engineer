@@ -131,8 +131,8 @@ class Model:
             "subsample": trial.suggest_float("subsample", 0.5, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
             "gamma": trial.suggest_float("gamma", 0, 10),
-            "reg_alpha": trial.suggest_float("reg_alpha", 0, 5),
-            "reg_lambda": trial.suggest_float("reg_lambda", 0, 5),
+            "reg_alpha": trial.suggest_float("reg_alpha", 0, 10),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0, 10),
             "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
         }
 
