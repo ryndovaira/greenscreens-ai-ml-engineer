@@ -8,7 +8,7 @@ def loss(real_rates, predicted_rates):
     return np.average(abs(predicted_rates / real_rates - 1.0)) * 100.0
 
 
-def detect_outliers_percentile(df, column, percentile=99.7):
+def detect_outliers_percentile(df, column, percentile=99.98):
     """
     Detects outliers based on the given percentile.
     """
@@ -16,7 +16,7 @@ def detect_outliers_percentile(df, column, percentile=99.7):
     return df[column] > threshold
 
 
-def remove_outliers(df, column, percentile=99.7):
+def remove_outliers(df, column, percentile=99.98):
     """
     Removes rows where values exceed the specified percentile threshold.
     """
@@ -52,7 +52,7 @@ def train_and_validate():
     print(f"Without NaN and duplicates: {df.shape}")
     df["rate"] = np.log1p(df["rate"])
     len_before = df.shape[0]
-    df, rate_threshold = remove_outliers(df, "rate", percentile=99.7)
+    df, rate_threshold = remove_outliers(df, "rate", percentile=99.98)
     len_after = df.shape[0]
     print(f"Rate threshold: {rate_threshold}")
     print(f"Without outliers: {df.shape}")
