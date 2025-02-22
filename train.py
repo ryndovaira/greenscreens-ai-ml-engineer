@@ -16,15 +16,22 @@ def detect_outliers_percentile(df, column, percentile=99.7):
     return df[column] > threshold
 
 
+def remove_outliers(df, column, percentile=99.7):
+    """
+    Removes rows where values exceed the specified percentile threshold.
+    """
+    threshold = np.percentile(df[column], percentile)
+    return df[df[column] <= threshold], threshold
+
+
 def add_custom_features(df):
     """
-    Adds custom features like is_round_trip and is_rate_outlier.
+    Adds custom features like is_kma_equal and is_rate_outlier.
     """
-    # is_round_trip: True if origin and destination are the same
-    df["is_round_trip"] = df["destination_kma"] == df["origin_kma"]
+    # is_kma_equal: True if origin and destination are the same
+    df["is_kma_equal"] = df["destination_kma"] == df["origin_kma"]
 
-    # is_rate_outlier: True if rate is in the top 0.3%
-    df["is_rate_outlier"] = detect_outliers_percentile(df, column="rate", percentile=99.7)
+    # df["is_rate_outlier"] = detect_outliers_percentile(df, column="rate", percentile=99.7)
 
     return df
 
@@ -40,8 +47,16 @@ def add_interaction_features(df):
 
 def train_and_validate():
     df = pd.read_csv("dataset/train.csv")
+    print(f"Initial shape: {df.shape}")
     df = df.dropna().drop_duplicates()
+    print(f"Without NaN and duplicates: {df.shape}")
     df["rate"] = np.log1p(df["rate"])
+    len_before = df.shape[0]
+    df, rate_threshold = remove_outliers(df, "rate", percentile=99.7)
+    len_after = df.shape[0]
+    print(f"Rate threshold: {rate_threshold}")
+    print(f"Without outliers: {df.shape}")
+    print(f"Outliers removed: {len_before - len_after}")
     df = add_interaction_features(df)
     df = add_custom_features(df)
 
@@ -69,6 +84,8 @@ def train_and_validate():
         "transport_type",
         "is_round_trip",
         "is_rate_outlier",
+        "is_kma_equal",
+        # "is_rate_outlier",
     ]
 
     print(f"Numerical Features: {numerical_features}")
