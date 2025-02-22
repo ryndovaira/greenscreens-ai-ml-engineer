@@ -6,9 +6,9 @@ from category_encoders import CatBoostEncoder
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_percentage_error
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, KBinsDiscretizer
 from xgboost import XGBRegressor
 
 
@@ -84,7 +84,7 @@ class Model:
         numerical_transformer = Pipeline(
             steps=[
                 ("log_transform", FunctionTransformer(np.log1p, validate=True)),
-                ("binning", BinningTransformer(columns=numerical_features, num_bins=8)),
+                ("binning", KBinsDiscretizer(n_bins=8, encode="ordinal", strategy="quantile")),
             ]
         )
 
