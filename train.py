@@ -50,13 +50,16 @@ def train_and_validate():
     print(f"Initial shape: {df.shape}")
     df = df.dropna().drop_duplicates()
     print(f"Without NaN and duplicates: {df.shape}")
-    df["rate"] = np.log1p(df["rate"])
+
     len_before = df.shape[0]
     df, rate_threshold = remove_outliers(df, "rate", percentile=99.98)
     len_after = df.shape[0]
     print(f"Rate threshold: {rate_threshold}")
     print(f"Without outliers: {df.shape}")
     print(f"Outliers removed: {len_before - len_after}")
+
+    df["rate"] = np.log1p(df["rate"])
+
     df = add_interaction_features(df)
     df = add_custom_features(df)
 
