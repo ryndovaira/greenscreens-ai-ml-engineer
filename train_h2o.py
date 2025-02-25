@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import h2o
 import pandas as pd
 import numpy as np
@@ -91,36 +93,38 @@ def extract_temporal_features(df, datetime_col="pickup_date"):
 class Model:
     def __init__(self, experiment_name="experiment"):
         h2o_port = int(os.getenv("H2O_PORT", 54321))
-        log_dir = os.getenv("H2O_LOG_DIR", "./logs")
+
+        self.experiment_name = experiment_name
+        self.experiment_dir = Path("experiments") / experiment_name
+        self.experiment_dir.mkdir(parents=True, exist_ok=True)
+        log_dir = Path(self.experiment_dir / os.getenv("H2O_LOG_DIR", "logs"))
 
         h2o.init(
-            log_dir=log_dir, ip="localhost", port=h2o_port, nthreads=-1, bind_to_localhost=False
+            log_dir=str(log_dir),
+            ip="localhost",
+            port=h2o_port,
+            nthreads=-1,
+            bind_to_localhost=False,
         )
 
         self.aml = None
         self.leader = None
-        self.experiment_name = experiment_name
-        os.makedirs(self.experiment_name, exist_ok=True)
 
-    def fit(self, df, target_column, validation_df):
+    def fit(
+        self,
+        features: list[str],
+        target: str,
+        df: pd.DataFrame,
+        validation_df: pd.DataFrame,
+    ):
         """
         Train H2O AutoML on the provided DataFrame.
         """
-        # Log-transform the target to handle outliers better
-        df["log_" + target_column] = np.log1p(df[target_column])
-        validation_df["log_" + target_column] = np.log1p(validation_df[target_column])
-
         # Convert DataFrame to H2OFrame
-        h2o_df = h2o.H2OFrame(df)
-        h2o_valid_df = h2o.H2OFrame(validation_df)
+        h2o_df = h2o.H2OFrame(df[features + [target]])
+        h2o_valid_df = h2o.H2OFrame(validation_df[features + [target]])
 
-        # Feature selection (exclude original target and date)
-        features = [
-            col
-            for col in df.columns
-            if col not in [target_column, "log_" + target_column, "pickup_date"]
-        ]
-        target = "log_" + target_column
+        self.save_json(features, "used_features.json")
 
         # Run H2O AutoML
         self.aml = H2OAutoML(
@@ -141,6 +145,7 @@ class Model:
 
         # Save model and experiment details
         self.save_model()
+        self.plot_shap_summary(df)
         self.save_feature_importance()
         self.save_model_params()
 
@@ -150,13 +155,18 @@ class Model:
         """
         h2o_df = h2o.H2OFrame(df)
         preds = self.leader.predict(h2o_df).as_data_frame()
-        return np.expm1(preds["predict"])  # Convert back from log scale
+        # leader has log_rate as target, so we need to convert it back to rate
+
+        if "log" in self.leader.params["response_column"]["actual"]["column_name"]:
+            return np.expm1(preds["predict"])
+        else:
+            return preds["predict"]
 
     def save_model(self):
         """
         Save the best model.
         """
-        model_path = h2o.save_model(model=self.leader, path=self.experiment_name, force=True)
+        model_path = h2o.save_model(model=self.leader, path=str(self.experiment_dir), force=True)
         print(f"Model saved at: {model_path}")
 
     def save_model_params(self):
@@ -164,7 +174,7 @@ class Model:
         Save the hyperparameters of the best model.
         """
         params = self.leader.params
-        params_path = os.path.join(self.experiment_name, "best_model_params.json")
+        params_path = os.path.join(self.experiment_dir, "best_model_params.json")
         with open(params_path, "w") as f:
             json.dump(params, f, indent=4)
         print(f"Hyperparameters saved at: {params_path}")
@@ -174,20 +184,19 @@ class Model:
         Save feature importance and plot the result.
         """
         varimp = self.leader.varimp(use_pandas=True)
-        varimp_path = os.path.join(self.experiment_name, "feature_importance.csv")
+        varimp_path = self.experiment_dir / "feature_importance.csv"
         varimp.to_csv(varimp_path, index=False)
         print(f"Feature importance saved at: {varimp_path}")
 
         # Plot feature importance
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=(16, 16))
         plt.barh(varimp["variable"], varimp["relative_importance"])
         plt.title("Feature Importance")
         plt.xlabel("Relative Importance")
-        plt.savefig(os.path.join(self.experiment_name, "feature_importance.png"))
+        fig_path = os.path.join(self.experiment_dir, "feature_importance.png")
+        plt.savefig(fig_path)
         plt.close()
-        print(
-            f"Feature importance plot saved at: {os.path.join(self.experiment_name, 'feature_importance.png')}"
-        )
+        print(f"Feature importance plot saved at: {fig_path}")
 
     def plot_shap_summary(self, df):
         """
@@ -199,12 +208,21 @@ class Model:
         except Exception as e:
             print("SHAP summary plot not supported for this model:", e)
 
+    def save_json(self, data, filename):
+        """
+        Utility to save data as JSON.
+        """
+        path = self.experiment_dir / filename
+        with open(path, "w") as f:
+            json.dump(data, f, indent=4)
+        print(f"Saved {filename} at {path}")
+
 
 def prepare_df(df: pd.DataFrame) -> pd.DataFrame:
     df = extract_temporal_features(df)
     df = add_interaction_features(df)
     df = add_custom_features(df)
-    df = log_skewed_columns(df, columns=["valid_miles", "weight"])
+    df = log_skewed_columns(df, columns=["valid_miles", "weight", "rate"])
     return df
 
 
@@ -224,6 +242,17 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+"""
+Full set of features:
+'rate', 'valid_miles', 'transport_type', 'weight', 'pickup_date',
+'origin_kma', 'destination_kma', 'month', 'day_of_week', 'hour',
+'month_sin', 'month_cos', 'day_of_week_sin', 'day_of_week_cos',
+'hour_sin', 'hour_cos', 'season', 'season_num',
+'miles_weight_interaction', 'kma_interaction', 'is_kma_equal',
+'log_valid_miles', 'log_weight', 'log_rate'
+"""
+
+
 def train_and_validate():
     """
     Train the model on training data and validate it on validation data.
@@ -232,22 +261,48 @@ def train_and_validate():
     df_valid = pd.read_csv("dataset/validation.csv")
 
     df = prepare_train_df(df)
-
     df_valid = prepare_df(df_valid)
 
-    model = Model(experiment_name="experiment_train_validate")
-    model.fit(df, "rate", df_valid)
-    predicted_rates = model.predict(df_valid)
-    mape = loss(df_valid["rate"], predicted_rates)
-    mape = np.round(mape, 2)
+    feature_sets = {
+        "basic": ["valid_miles", "weight"],
+        "basic_log": ["log_valid_miles", "log_weight"],
+        # "basic_log_transport": ["log_valid_miles", "log_weight", "transport_type"],
+        # "basic_log_equal_kma": ["log_valid_miles", "log_weight", "is_kma_equal"],
+        # "basic_log_transport_equal_kma": ["log_valid_miles", "log_weight", "transport_type", "is_kma_equal"],
+        # "basic_log_transport_equal_kma_temporal": ["log_valid_miles", "log_weight", "transport_type", "is_kma_equal", 'season', "month", "day_of_week", "hour"],
+        # "basic_log_transport_kma": ["log_valid_miles", "log_weight", "transport_type", "origin_kma", "destination_kma"],
+        # "basic_log_transport_kma_temporal": ["log_valid_miles", "log_weight", "transport_type", "origin_kma", "destination_kma", 'season', "month", "day_of_week", "hour"],
+        # "everything": ["valid_miles", "weight", "transport_type", "month", "day_of_week", "hour", "origin_kma", "destination_kma", "is_kma_equal", 'season', "month", "day_of_week", "hour"],
+        # "everything_log": ["log_valid_miles", "log_weight", "transport_type", "month", "day_of_week", "hour", "origin_kma", "destination_kma", "is_kma_equal", 'season', "month", "day_of_week", "hour"],
+    }
 
-    # Save MAPE score
-    log_path = os.path.join(model.experiment_name, "validation_results.json")
-    with open(log_path, "w") as f:
-        json.dump({"MAPE": mape}, f, indent=4)
-    print(f"Validation MAPE: {mape}% (saved in {log_path})")
+    leader_board = {}
 
-    return mape
+    for idx, (name, features) in enumerate(feature_sets.items()):
+        for target_feature in ["rate", "log_rate"]:
+            experiment_name = f"experiment_train_validate_{idx + 1}_{name}_{target_feature}"
+            print(
+                f"\nRunning experiment: {experiment_name} with target {target_feature} and features: {features}"
+            )
+
+            model = Model(experiment_name=experiment_name)
+            model.fit(features=features, target=target_feature, df=df, validation_df=df_valid)
+
+            predicted_rates = model.predict(df_valid)
+            mape = loss(df_valid["rate"], predicted_rates)
+            mape = np.round(mape, 2)
+
+            leader_board[experiment_name] = mape
+
+            model.save_json({"MAPE": mape}, "validation_results.json")
+            print(f"Validation MAPE: {mape}%")
+
+    # find the best model
+    print("\nLeaderboard:")
+    for name, mape in leader_board.items():
+        print(f"{name}: {mape}%")
+
+    return min(leader_board.values())
 
 
 def generate_final_solution():
