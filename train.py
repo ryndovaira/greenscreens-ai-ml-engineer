@@ -107,6 +107,7 @@ def train_and_validate():
 
     mape = loss(real_rates, predicted_rates)
     mape = np.round(mape, 2)
+    print(f"Accuracy of validation is {mape}%")
     return mape
 
 
