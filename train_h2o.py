@@ -14,6 +14,71 @@ def loss(real_rates, predicted_rates):
     return np.mean(np.abs((real_rates - predicted_rates) / real_rates)) * 100
 
 
+def remove_outliers(df, column, percentile=99.98):
+    """
+    Removes rows where values exceed the specified percentile threshold.
+    """
+    threshold = np.percentile(df[column], percentile)
+    return df[df[column] <= threshold], threshold
+
+
+def add_custom_features(df):
+    """
+    Adds custom features like is_kma_equal and is_rate_outlier.
+    """
+    df["is_kma_equal"] = df["destination_kma"] == df["origin_kma"]
+    return df
+
+
+def add_interaction_features(df):
+    """
+    Adds interaction features to the dataframe.
+    """
+    df["miles_weight_interaction"] = df["valid_miles"] * df["weight"]
+    df["kma_interaction"] = df["origin_kma"] + "_" + df["destination_kma"]
+    return df
+
+
+def extract_temporal_features(df, datetime_col="pickup_date"):
+    """
+    Extracts temporal and cyclic features from the pickup_date.
+    """
+    df[datetime_col] = pd.to_datetime(df[datetime_col])
+    df["month"] = df[datetime_col].dt.month
+    df["day_of_week"] = df[datetime_col].dt.dayofweek
+    df["hour"] = df[datetime_col].dt.hour
+
+    # Cyclic encoding
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+    df["day_of_week_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
+    df["day_of_week_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
+    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
+    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
+
+    # Season feature
+    df["season"] = df["month"].map(
+        {
+            12: "winter",
+            1: "winter",
+            2: "winter",
+            3: "spring",
+            4: "spring",
+            5: "spring",
+            6: "summer",
+            7: "summer",
+            8: "summer",
+            9: "autumn",
+            10: "autumn",
+            11: "autumn",
+        }
+    )
+    season_mapping = {"winter": 0, "spring": 1, "summer": 2, "autumn": 3}
+    df["season_num"] = df["season"].map(season_mapping)
+
+    return df
+
+
 class Model:
     def __init__(self, experiment_name="experiment"):
         h2o_port = int(os.getenv("H2O_PORT", 54321))
@@ -51,13 +116,13 @@ class Model:
         # Run H2O AutoML
         self.aml = H2OAutoML(
             project_name=self.experiment_name,
-            max_models=1,  # Reduce number of models (was 20)
-            # max_runtime_secs=60 * 5,  # 2 minutes max runtime
+            max_models=1,
+            max_runtime_secs=60 * 5,
             seed=42,
-            sort_metric="mape",  # Keep MAPE as main evaluation
-            stopping_metric="MAE",  # Simple metric for stopping
-            stopping_rounds=1,  # Faster early stopping
-            # exclude_algos=["DeepLearning", "StackedEnsemble"],  # Exclude heavy models
+            sort_metric="MAE",
+            stopping_metric="MAE",
+            stopping_rounds=1,
+            exclude_algos=["DeepLearning", "StackedEnsemble"],  # Exclude heavy models
         )
 
         self.aml.train(x=features, y=target, training_frame=h2o_df, leaderboard_frame=h2o_valid_df)
@@ -133,6 +198,20 @@ def train_and_validate():
     df = pd.read_csv("dataset/train.csv")
     df_valid = pd.read_csv("dataset/validation.csv")
 
+    df = df.dropna().drop_duplicates()
+    len_before = df.shape[0]
+    df, rate_threshold = remove_outliers(df, "rate", percentile=99.98)
+    len_after = df.shape[0]
+    print(f"Rate threshold: {rate_threshold}, Outliers removed: {len_before - len_after}")
+
+    df = extract_temporal_features(df)
+    df = add_interaction_features(df)
+    df = add_custom_features(df)
+
+    df_valid = extract_temporal_features(df_valid)
+    df_valid = add_interaction_features(df_valid)
+    df_valid = add_custom_features(df_valid)
+
     model = Model(experiment_name="experiment_train_validate")
     model.fit(df, "rate", df_valid)
     predicted_rates = model.predict(df_valid)
@@ -153,13 +232,27 @@ def generate_final_solution():
     Train the model on combined train and validation data and generate predictions for the test set.
     """
     df_train = pd.read_csv("dataset/train.csv")
+
+    df_train = df_train.dropna().drop_duplicates()
+    len_before = df_train.shape[0]
+    df_train, rate_threshold = remove_outliers(df_train, "rate", percentile=99.98)
+    len_after = df_train.shape[0]
+    print(f"Rate threshold: {rate_threshold}, Outliers removed: {len_before - len_after}")
+
     df_valid = pd.read_csv("dataset/validation.csv")
     df_full = pd.concat([df_train, df_valid]).reset_index(drop=True)
 
+    df_full = extract_temporal_features(df_full)
+    df_full = add_interaction_features(df_full)
+    df_full = add_custom_features(df_full)
+
     model = Model(experiment_name="experiment_final")
-    model.fit(df_full, "rate")
+    model.fit(df_full, "rate", df_valid)
 
     df_test = pd.read_csv("dataset/test.csv")
+    df_test = extract_temporal_features(df_test)
+    df_test = add_interaction_features(df_test)
+    df_test = add_custom_features(df_test)
     df_test["predicted_rate"] = model.predict(df_test)
     output_path = os.path.join(model.experiment_name, "predicted.csv")
     df_test.to_csv(output_path, index=False)
