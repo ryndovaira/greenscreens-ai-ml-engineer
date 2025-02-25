@@ -30,6 +30,15 @@ def add_custom_features(df):
     return df
 
 
+def log_skewed_columns(df, columns):
+    """
+    Log transform skewed columns.
+    """
+    for col in columns:
+        df[f"log_{col}"] = np.log1p(df[col])
+    return df
+
+
 def add_interaction_features(df):
     """
     Adds interaction features to the dataframe.
@@ -191,6 +200,30 @@ class Model:
             print("SHAP summary plot not supported for this model:", e)
 
 
+def prepare_df(df: pd.DataFrame) -> pd.DataFrame:
+    df = extract_temporal_features(df)
+    df = add_interaction_features(df)
+    df = add_custom_features(df)
+    df = log_skewed_columns(df, columns=["valid_miles", "weight"])
+    return df
+
+
+def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare the dataframe for training.
+    """
+    df = df.dropna().drop_duplicates()
+
+    len_before = df.shape[0]
+    df, rate_threshold = remove_outliers(df, "rate", percentile=99.98)
+    len_after = df.shape[0]
+    print(f"Rate threshold: {rate_threshold}, Outliers removed: {len_before - len_after}")
+
+    df = prepare_df(df)
+
+    return df
+
+
 def train_and_validate():
     """
     Train the model on training data and validate it on validation data.
@@ -198,19 +231,9 @@ def train_and_validate():
     df = pd.read_csv("dataset/train.csv")
     df_valid = pd.read_csv("dataset/validation.csv")
 
-    df = df.dropna().drop_duplicates()
-    len_before = df.shape[0]
-    df, rate_threshold = remove_outliers(df, "rate", percentile=99.98)
-    len_after = df.shape[0]
-    print(f"Rate threshold: {rate_threshold}, Outliers removed: {len_before - len_after}")
+    df = prepare_train_df(df)
 
-    df = extract_temporal_features(df)
-    df = add_interaction_features(df)
-    df = add_custom_features(df)
-
-    df_valid = extract_temporal_features(df_valid)
-    df_valid = add_interaction_features(df_valid)
-    df_valid = add_custom_features(df_valid)
+    df_valid = prepare_df(df_valid)
 
     model = Model(experiment_name="experiment_train_validate")
     model.fit(df, "rate", df_valid)
@@ -233,26 +256,17 @@ def generate_final_solution():
     """
     df_train = pd.read_csv("dataset/train.csv")
 
-    df_train = df_train.dropna().drop_duplicates()
-    len_before = df_train.shape[0]
-    df_train, rate_threshold = remove_outliers(df_train, "rate", percentile=99.98)
-    len_after = df_train.shape[0]
-    print(f"Rate threshold: {rate_threshold}, Outliers removed: {len_before - len_after}")
+    df_train = prepare_train_df(df_train)
 
     df_valid = pd.read_csv("dataset/validation.csv")
     df_full = pd.concat([df_train, df_valid]).reset_index(drop=True)
 
-    df_full = extract_temporal_features(df_full)
-    df_full = add_interaction_features(df_full)
-    df_full = add_custom_features(df_full)
-
+    df_full = prepare_df(df_full)
     model = Model(experiment_name="experiment_final")
     model.fit(df_full, "rate", df_valid)
 
     df_test = pd.read_csv("dataset/test.csv")
-    df_test = extract_temporal_features(df_test)
-    df_test = add_interaction_features(df_test)
-    df_test = add_custom_features(df_test)
+    df_test = prepare_df(df_test)
     df_test["predicted_rate"] = model.predict(df_test)
     output_path = os.path.join(model.experiment_name, "predicted.csv")
     df_test.to_csv(output_path, index=False)

@@ -25,4 +25,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 54321
 
 # Set default command
-CMD ["python", "train_h2o.py"]
+CMD python train_h2o.py && tail -f /dev/null
+
