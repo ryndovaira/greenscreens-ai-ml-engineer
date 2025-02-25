@@ -1,0 +1,16 @@
+services:
+  h2o-ml-project:
+    build: .
+    container_name: h2o-ml-project
+    ports:
+      - "54321:54321"
+    volumes:
+      - .:/app                      # Синхронизируем весь проект
+      - ./dataset:/app/dataset      # Синхронизируем датасеты
+      - ./logs:/app/logs            # Сохраняем логи
+    environment:
+      - H2O_PORT=54321
+      - H2O_WEB_PORT=54321
+      - H2O_DATA_DIR=/app/dataset
+      - H2O_LOG_DIR=/app/logs
+    restart: unless-stopped
