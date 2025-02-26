@@ -146,7 +146,7 @@ class Model:
 
         # Save model and experiment details
         self.save_model()
-        self.plot_shap_summary(df)
+        self.plot_shap_summary(df[features])
         self.save_feature_importance()
         self.save_model_params()
 
