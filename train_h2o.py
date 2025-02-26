@@ -164,7 +164,9 @@ def prepare_categorical_features(
             .fillna(train_encoders["high"]._mean)
             .add_prefix("encoded_")
         )
-        df_low_cardinality = train_encoders["low"].transform(df[low_cardinality])
+        df_low_cardinality = (
+            train_encoders["low"].transform(df[low_cardinality]).add_prefix("encoded_")
+        )
     # add high and low cardinality features to the dataframe without dropping the original columns
     df = df.join(df_high_cardinality).join(df_low_cardinality)
 
@@ -485,6 +487,9 @@ def train_and_validate():
 
     encoders, kbins = load_encoders("encoders.pkl")
     df_valid, _, _ = prepare_df(df_valid, target_feature, encoders, kbins)
+    print(f"Validation columns:\n{'\n'.join(df_valid.columns)}\n\n")
+
+    print(f"Columns diff:\n{set(df.columns) - set(df_valid.columns)}\n\n")
 
     feature_sets = {
         "all": df.drop(["rate", "log_rate"], axis=1).columns.tolist(),
