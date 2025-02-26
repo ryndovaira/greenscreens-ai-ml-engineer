@@ -216,26 +216,48 @@ class Model:
 
         # Save model and experiment details
         self.save_model()
-        self.plot_shap_summary(df[features])
+        self.plot_shap_summary(df[features], "train")
+        self.plot_shap_summary(validation_df, "valid")
         self.save_feature_importance()
         self.save_model_params()
+        self.explain_model(h2o_df, "train")
+        self.explain_model(h2o_valid_df, "valid")
 
-        # learning_curve_plot
-        learning_curve_plot = self.leader.learning_curve_plot()
-        learning_curve_plot_path = os.path.join(self.experiment_dir, "learning_curve_plot.png")
-        learning_curve_plot.savefig(learning_curve_plot_path)
-        print(f"Learning curve plot saved at: {learning_curve_plot_path}")
+        try:
+            learning_curve_plot = self.leader.learning_curve_plot()
+            learning_curve_plot_path = os.path.join(self.experiment_dir, "learning_curve_plot.png")
+            learning_curve_plot.savefig(learning_curve_plot_path)
+            print(f"Learning curve plot saved at: {learning_curve_plot_path}")
+        except Exception as e:
+            print("Learning curve plot not supported:", e)
 
-        pf = self.aml.pareto_front()
-        pf_path = os.path.join(self.experiment_dir, "pareto_front.png")
-        pf.savefig(pf_path)
-        print(f"Pareto front saved at: {pf_path}")
+        try:
+            pf = self.aml.pareto_front()
+            pf_path = os.path.join(self.experiment_dir, "pareto_front.png")
+            pf.savefig(pf_path)
+            print(f"Pareto front saved at: {pf_path}")
+        except Exception as e:
+            print("Pareto front not supported:", e)
+
+    def explain_model(self, h2o_valid_df, name):
+        """
+        Uses H2O explainability methods to visualize feature importance and SHAP values.
+        """
+        try:
+            explanation = self.leader.explain(h2o_valid_df)  # 🔧 Вызов explain() вместо SHAP
+            explanation_path = os.path.join(self.experiment_dir, f"model_explanation_{name}.json")
+            with open(explanation_path, "w") as f:
+                json.dump(str(explanation), f)
+            print(f"Model explanation saved at: {explanation_path}")
+        except Exception as e:
+            print("Model explainability not supported:", e)
 
     def analyze_feature_importance(self, df):
         """Computes SHAP and feature importance."""
         try:
             h2o_df = h2o.H2OFrame(df)
-            explainer = shap.Explainer(self.leader.predict, h2o_df)
+            # explainer = shap.Explainer(self.leader.predict, h2o_df)
+            explainer = self.leader.varimp(use_pandas=True)
             shap_values = explainer(h2o_df)
 
             importance_df = pd.DataFrame(
@@ -281,46 +303,56 @@ class Model:
         """
         Save feature importance and plot the result.
         """
-        varimp = self.leader.varimp(use_pandas=True)
-        varimp_path = self.experiment_dir / "feature_importance.csv"
-        varimp.to_csv(varimp_path, index=False)
-        print(f"Feature importance saved at: {varimp_path}")
+        try:
+            varimp = self.leader.varimp(use_pandas=True)
+            varimp_path = self.experiment_dir / "feature_importance.csv"
+            varimp.to_csv(varimp_path, index=False)
+            print(f"Feature importance saved at: {varimp_path}")
 
-        # Plot feature importance
-        plt.figure(figsize=(16, 16))
-        plt.barh(varimp["variable"], varimp["relative_importance"])
-        plt.title("Feature Importance")
-        plt.xlabel("Relative Importance")
-        fig_path = os.path.join(self.experiment_dir, "feature_importance.png")
-        plt.savefig(fig_path)
-        plt.close()
-        print(f"Feature importance plot saved at: {fig_path}")
+            plt.figure(figsize=(16, 16))
+            plt.barh(varimp["variable"], varimp["relative_importance"])
+            plt.title("Feature Importance")
+            plt.xlabel("Relative Importance")
+            fig_path = os.path.join(self.experiment_dir, "feature_importance.png")
+            plt.savefig(fig_path)
+            plt.close()
+            print(f"Feature importance plot saved at: {fig_path}")
+        except Exception as e:
+            print("Feature importance not supported:", e)
 
-        varimp_heatmap = self.leader.varimp_heatmap()
-        varimp_heatmap_path = os.path.join(self.experiment_dir, "feature_importance_heatmap.png")
-        varimp_heatmap.savefig(varimp_heatmap_path)
-        print(f"Feature importance heatmap saved at: {varimp_heatmap_path}")
+        try:
+            varimp_heatmap = self.leader.varimp_heatmap()
+            varimp_heatmap_path = os.path.join(
+                self.experiment_dir, "feature_importance_heatmap.png"
+            )
+            varimp_heatmap.savefig(varimp_heatmap_path)
+            print(f"Feature importance heatmap saved at: {varimp_heatmap_path}")
+        except Exception as e:
+            print("Feature importance heatmap not supported:", e)
 
-        # model_correlation_heatmap
-        model_correlation_heatmap = self.leader.model_correlation_heatmap()
-        model_correlation_heatmap_path = os.path.join(
-            self.experiment_dir, "model_correlation_heatmap.png"
-        )
-        model_correlation_heatmap.savefig(model_correlation_heatmap_path)
-        print(f"Model correlation heatmap saved at: {model_correlation_heatmap_path}")
+        try:
+            model_correlation_heatmap = self.leader.model_correlation_heatmap()
+            model_correlation_heatmap_path = os.path.join(
+                self.experiment_dir, "model_correlation_heatmap.png"
+            )
+            model_correlation_heatmap.savefig(model_correlation_heatmap_path)
+            print(f"Model correlation heatmap saved at: {model_correlation_heatmap_path}")
+        except Exception as e:
+            print("Model correlation heatmap not supported:", e)
 
-    def plot_shap_summary(self, df):
+    def plot_shap_summary(self, df, name: str):
         """
         Plot SHAP summary plot if supported by the model.
         """
         try:
             h2o_df = h2o.H2OFrame(df)
             shap_plot = self.leader.shap_summary_plot(h2o_df)
-            shap_plot_path = os.path.join(self.experiment_dir, "shap_summary_plot.png")
+            shap_plot_path = os.path.join(self.experiment_dir, f"shap_summary_plot_{name}.png")
             shap_plot.savefig(shap_plot_path)
             print(f"SHAP summary plot saved at: {shap_plot_path}")
-
-            # shap_explain_row_plot
+        except Exception as e:
+            print("SHAP summary plot not supported for this model:", e)
+        try:
             shap_explain_row_plot = self.leader.shap_explain_row_plot(h2o_df)
             shap_explain_row_plot_path = os.path.join(
                 self.experiment_dir, "shap_explain_row_plot.png"
@@ -329,7 +361,7 @@ class Model:
             print(f"SHAP explain row plot saved at: {shap_explain_row_plot_path}")
 
         except Exception as e:
-            print("SHAP summary plot not supported for this model:", e)
+            print("SHAP explain row plot not supported for this model:", e)
 
     def save_json(self, data, filename):
         """
@@ -482,6 +514,7 @@ def train_and_validate():
         model.fit(features=features, target=target_feature, df=df, validation_df=df_valid)
 
         important_features = model.analyze_feature_importance(df)
+        print(f"Important features: {important_features}")
 
         predicted_rates = model.predict(df_valid)
         mape = loss(df_valid["rate"], predicted_rates)
