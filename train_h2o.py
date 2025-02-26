@@ -1,12 +1,16 @@
+import pickle
 from pathlib import Path
 
 import h2o
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from category_encoders import CatBoostEncoder, OneHotEncoder
 from h2o.automl import H2OAutoML
 import os
 import json
+
+from sklearn.preprocessing import KBinsDiscretizer
 
 
 def loss(real_rates, predicted_rates):
@@ -20,8 +24,14 @@ def remove_outliers(df, column, percentile=99.98):
     """
     Removes rows where values exceed the specified percentile threshold.
     """
+
+    len_before = df.shape[0]
     threshold = np.percentile(df[column], percentile)
-    return df[df[column] <= threshold], threshold
+    df = df[df[column] <= threshold]
+    len_after = df.shape[0]
+    print(f"Rate threshold: {threshold}, Outliers removed: {len_before - len_after}")
+
+    return df
 
 
 def add_custom_features(df):
@@ -90,6 +100,64 @@ def extract_temporal_features(df, datetime_col="pickup_date"):
     return df
 
 
+def bin_features(df, columns, n_bins=8, kbins=None):
+    bin_columns = [f"bin_{col}" for col in columns]
+
+    if kbins is None:
+        kbins = KBinsDiscretizer(
+            n_bins=n_bins, encode="ordinal", strategy="quantile", random_state=42
+        )
+        transformed = kbins.fit_transform(df[columns])
+    else:
+        transformed = kbins.transform(df[columns])
+
+    # Преобразуем результат обратно в DataFrame
+    df[bin_columns] = pd.DataFrame(transformed, columns=bin_columns, index=df.index)
+
+    return df, kbins
+
+
+def prepare_categorical_features(df, high_cardinality, low_cardinality, train_encoders=None):
+    if train_encoders is None:
+        train_encoders = {
+            "high": CatBoostEncoder(),
+            "low": OneHotEncoder(handle_unknown="ignore"),
+        }
+        df_high_cardinality = (
+            train_encoders["high"]
+            .fit_transform(df[high_cardinality], df["rate"])
+            .add_prefix("encoded_")
+        )
+        df_low_cardinality = (
+            train_encoders["low"].fit_transform(df[low_cardinality]).add_prefix("encoded_")
+        )
+    else:
+        df_high_cardinality = (
+            train_encoders["high"]
+            .transform(df[high_cardinality])
+            .fillna(train_encoders["high"]._mean)
+            .add_prefix("encoded_")
+        )
+        df_low_cardinality = train_encoders["low"].transform(df[low_cardinality])
+    # add high and low cardinality features to the dataframe without dropping the original columns
+    df = df.join(df_high_cardinality).join(df_low_cardinality)
+
+    return df, train_encoders
+
+
+def save_encoders(encoders, kbins, path="encoders.pkl"):
+    with open(path, "wb") as f:
+        pickle.dump({"encoders": encoders, "kbins": kbins}, f)
+    print(f"Encoders saved at: {path}")
+
+
+def load_encoders(path="encoders.pkl"):
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    print(f"Encoders loaded from: {path}")
+    return data["encoders"], data["kbins"]
+
+
 class Model:
     def __init__(self, experiment_name="experiment"):
         h2o_port = int(os.getenv("H2O_PORT", 54321))
@@ -129,7 +197,7 @@ class Model:
         # Run H2O AutoML
         self.aml = H2OAutoML(
             project_name=self.experiment_name,
-            max_models=15,
+            max_models=1,
             seed=42,
             sort_metric="MAE",
             stopping_metric="MAE",
@@ -218,12 +286,16 @@ class Model:
         print(f"Saved {filename} at {path}")
 
 
-def prepare_df(df: pd.DataFrame) -> pd.DataFrame:
+def prepare_df(df: pd.DataFrame, train_encoders=None, kbins=None):
     df = extract_temporal_features(df)
     df = add_interaction_features(df)
     df = add_custom_features(df)
-    df = log_skewed_columns(df, columns=["valid_miles", "weight", "rate"])
-    return df
+    df = log_skewed_columns(df, ["valid_miles", "weight", "rate"])
+    df, kbins = bin_features(df, ["valid_miles", "weight"], kbins=kbins)
+    df, encoders = prepare_categorical_features(
+        df, ["origin_kma", "destination_kma"], ["transport_type", "season"], train_encoders
+    )
+    return df, encoders, kbins
 
 
 def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -231,13 +303,10 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     Prepare the dataframe for training.
     """
     df = df.dropna().drop_duplicates()
+    df = remove_outliers(df, "rate", percentile=99.98)
+    df, encoders, kbins = prepare_df(df)
 
-    len_before = df.shape[0]
-    df, rate_threshold = remove_outliers(df, "rate", percentile=99.98)
-    len_after = df.shape[0]
-    print(f"Rate threshold: {rate_threshold}, Outliers removed: {len_before - len_after}")
-
-    df = prepare_df(df)
+    save_encoders(encoders, kbins, "encoders.pkl")
 
     return df
 
@@ -249,7 +318,11 @@ Full set of features:
 'month_sin', 'month_cos', 'day_of_week_sin', 'day_of_week_cos',
 'hour_sin', 'hour_cos', 'season', 'season_num',
 'miles_weight_interaction', 'kma_interaction', 'is_kma_equal',
-'log_valid_miles', 'log_weight', 'log_rate'
+'log_valid_miles', 'log_weight', 'log_rate', 'bin_valid_miles',
+'bin_weight', 'encoded_origin_kma', 'encoded_destination_kma',
+'encoded_transport_type_1', 'encoded_transport_type_2',
+'encoded_transport_type_3', 'encoded_season_1', 'encoded_season_2',
+'encoded_season_3', 'encoded_season_4'
 """
 
 
@@ -261,7 +334,9 @@ def train_and_validate():
     df_valid = pd.read_csv("dataset/validation.csv")
 
     df = prepare_train_df(df)
-    df_valid = prepare_df(df_valid)
+    print(f"Columns: {df.columns.tolist()}\n\n")
+    encoders, kbins = load_encoders("encoders.pkl")
+    df_valid, _, _ = prepare_df(df_valid, encoders, kbins)
 
     feature_sets = {
         "basic": ["valid_miles", "weight"],
@@ -371,18 +446,20 @@ def generate_final_solution():
     Train the model on combined train and validation data and generate predictions for the test set.
     """
     df_train = pd.read_csv("dataset/train.csv")
-
     df_train = prepare_train_df(df_train)
 
+    encoders, kbins = load_encoders("encoders.pkl")
     df_valid = pd.read_csv("dataset/validation.csv")
-    df_full = pd.concat([df_train, df_valid]).reset_index(drop=True)
+    df_valid, _, _ = prepare_df(df_valid, encoders, kbins)
 
-    df_full = prepare_df(df_full)
+    df_full = pd.concat([df_train, df_valid]).reset_index(drop=True)
+    df_full, _, _ = prepare_df(df_full, encoders, kbins)
+
     model = Model(experiment_name="experiment_final")
     model.fit(df_full, "rate", df_valid)
 
     df_test = pd.read_csv("dataset/test.csv")
-    df_test = prepare_df(df_test)
+    df_test, _, _ = prepare_df(df_test, encoders, kbins)
     df_test["predicted_rate"] = model.predict(df_test)
     output_path = os.path.join(model.experiment_name, "predicted.csv")
     df_test.to_csv(output_path, index=False)
