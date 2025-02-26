@@ -129,13 +129,14 @@ class Model:
         # Run H2O AutoML
         self.aml = H2OAutoML(
             project_name=self.experiment_name,
-            max_models=1,
-            max_runtime_secs=60 * 5,
+            max_models=15,
             seed=42,
             sort_metric="MAE",
             stopping_metric="MAE",
-            stopping_rounds=1,
-            exclude_algos=["DeepLearning", "StackedEnsemble"],  # Exclude heavy models
+            exclude_algos=[
+                "DeepLearning",
+                # "StackedEnsemble"
+            ],
         )
 
         self.aml.train(x=features, y=target, training_frame=h2o_df, leaderboard_frame=h2o_valid_df)
@@ -155,7 +156,6 @@ class Model:
         """
         h2o_df = h2o.H2OFrame(df)
         preds = self.leader.predict(h2o_df).as_data_frame()
-        # leader has log_rate as target, so we need to convert it back to rate
 
         if "log" in self.leader.params["response_column"]["actual"]["column_name"]:
             return np.expm1(preds["predict"])
