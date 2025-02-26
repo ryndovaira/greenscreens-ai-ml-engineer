@@ -457,14 +457,6 @@ valid_miles_min
 valid_miles_mean
 valid_miles_median
 valid_miles_max
-rate_min
-rate_mean
-rate_median
-rate_max
-log_rate_min
-log_rate_mean
-log_rate_median
-log_rate_max
 bin_valid_miles
 bin_weight
 encoded_origin_kma
@@ -495,7 +487,7 @@ def train_and_validate():
     df_valid, _, _ = prepare_df(df_valid, target_feature, encoders, kbins)
 
     feature_sets = {
-        "all": df.columns.tolist(),
+        "all": df.drop(["rate", "log_rate"], axis=1).columns.tolist(),
         # "basic_log": {"log_valid_miles", "log_weight"},
         # "basic_log_transport": {"log_valid_miles", "log_weight", "transport_type"},
         # "basic_log_equal_kma": {"log_valid_miles", "log_weight", "is_kma_equal"},
