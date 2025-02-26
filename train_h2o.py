@@ -9,7 +9,7 @@ from category_encoders import CatBoostEncoder, OneHotEncoder
 from h2o.automl import H2OAutoML
 import os
 import json
-
+import shap
 from sklearn.preprocessing import KBinsDiscretizer
 
 
@@ -218,6 +218,34 @@ class Model:
         self.save_feature_importance()
         self.save_model_params()
 
+        # learning_curve_plot
+        learning_curve_plot = self.leader.learning_curve_plot()
+        learning_curve_plot_path = os.path.join(self.experiment_dir, "learning_curve_plot.png")
+        learning_curve_plot.savefig(learning_curve_plot_path)
+        print(f"Learning curve plot saved at: {learning_curve_plot_path}")
+
+        pf = self.aml.pareto_front()
+        pf_path = os.path.join(self.experiment_dir, "pareto_front.png")
+        pf.savefig(pf_path)
+        print(f"Pareto front saved at: {pf_path}")
+
+    def analyze_feature_importance(self, df):
+        """Computes SHAP and feature importance."""
+        try:
+            h2o_df = h2o.H2OFrame(df)
+            explainer = shap.Explainer(self.leader.predict, h2o_df)
+            shap_values = explainer(h2o_df)
+
+            importance_df = pd.DataFrame(
+                {"feature": df.columns, "shap_importance": np.abs(shap_values.values).mean(axis=0)}
+            ).sort_values("shap_importance", ascending=False)
+
+            importance_df.to_csv(self.experiment_dir / "shap_feature_importance.csv", index=False)
+            return importance_df["feature"].tolist()
+        except Exception as e:
+            print("SHAP not supported:", e)
+            return self.leader.varimp(use_pandas=True)["variable"].tolist()
+
     def predict(self, df):
         """
         Make predictions using the trained H2O model.
@@ -266,13 +294,38 @@ class Model:
         plt.close()
         print(f"Feature importance plot saved at: {fig_path}")
 
+        varimp_heatmap = self.leader.varimp_heatmap()
+        varimp_heatmap_path = os.path.join(self.experiment_dir, "feature_importance_heatmap.png")
+        varimp_heatmap.savefig(varimp_heatmap_path)
+        print(f"Feature importance heatmap saved at: {varimp_heatmap_path}")
+
+        # model_correlation_heatmap
+        model_correlation_heatmap = self.leader.model_correlation_heatmap()
+        model_correlation_heatmap_path = os.path.join(
+            self.experiment_dir, "model_correlation_heatmap.png"
+        )
+        model_correlation_heatmap.savefig(model_correlation_heatmap_path)
+        print(f"Model correlation heatmap saved at: {model_correlation_heatmap_path}")
+
     def plot_shap_summary(self, df):
         """
         Plot SHAP summary plot if supported by the model.
         """
         try:
             h2o_df = h2o.H2OFrame(df)
-            self.leader.shap_summary_plot(h2o_df)
+            shap_plot = self.leader.shap_summary_plot(h2o_df)
+            shap_plot_path = os.path.join(self.experiment_dir, "shap_summary_plot.png")
+            shap_plot.savefig(shap_plot_path)
+            print(f"SHAP summary plot saved at: {shap_plot_path}")
+
+            # shap_explain_row_plot
+            shap_explain_row_plot = self.leader.shap_explain_row_plot(h2o_df)
+            shap_explain_row_plot_path = os.path.join(
+                self.experiment_dir, "shap_explain_row_plot.png"
+            )
+            shap_explain_row_plot.savefig(shap_explain_row_plot_path)
+            print(f"SHAP explain row plot saved at: {shap_explain_row_plot_path}")
+
         except Exception as e:
             print("SHAP summary plot not supported for this model:", e)
 
@@ -339,6 +392,7 @@ def train_and_validate():
     df_valid, _, _ = prepare_df(df_valid, encoders, kbins)
 
     feature_sets = {
+        "all": df.columns.tolist(),
         "basic": ["valid_miles", "weight"],
         "basic_log": ["log_valid_miles", "log_weight"],
         "basic_log_transport": ["log_valid_miles", "log_weight", "transport_type"],
@@ -420,6 +474,8 @@ def train_and_validate():
 
             model = Model(experiment_name=experiment_name)
             model.fit(features=features, target=target_feature, df=df, validation_df=df_valid)
+
+            important_features = model.analyze_feature_importance(df)
 
             predicted_rates = model.predict(df_valid)
             mape = loss(df_valid["rate"], predicted_rates)
