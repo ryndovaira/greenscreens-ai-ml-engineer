@@ -117,7 +117,9 @@ def bin_features(df, columns, n_bins=8, kbins=None):
     return df, kbins
 
 
-def prepare_categorical_features(df, high_cardinality, low_cardinality, train_encoders=None):
+def prepare_categorical_features(
+    df, target_feature: str, high_cardinality, low_cardinality, train_encoders=None
+):
     if train_encoders is None:
         train_encoders = {
             "high": CatBoostEncoder(),
@@ -125,7 +127,7 @@ def prepare_categorical_features(df, high_cardinality, low_cardinality, train_en
         }
         df_high_cardinality = (
             train_encoders["high"]
-            .fit_transform(df[high_cardinality], df["rate"])
+            .fit_transform(df[high_cardinality], df[target_feature])
             .add_prefix("encoded_")
         )
         df_low_cardinality = (
@@ -339,25 +341,29 @@ class Model:
         print(f"Saved {filename} at {path}")
 
 
-def prepare_df(df: pd.DataFrame, train_encoders=None, kbins=None):
+def prepare_df(df: pd.DataFrame, target_feature: str, train_encoders=None, kbins=None):
     df = extract_temporal_features(df)
     df = add_interaction_features(df)
     df = add_custom_features(df)
     df = log_skewed_columns(df, ["valid_miles", "weight", "rate"])
     df, kbins = bin_features(df, ["valid_miles", "weight"], kbins=kbins)
     df, encoders = prepare_categorical_features(
-        df, ["origin_kma", "destination_kma"], ["transport_type", "season"], train_encoders
+        df,
+        target_feature,
+        ["origin_kma", "destination_kma"],
+        ["transport_type", "season"],
+        train_encoders,
     )
     return df, encoders, kbins
 
 
-def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
+def prepare_train_df(df: pd.DataFrame, target_feature: str) -> pd.DataFrame:
     """
     Prepare the dataframe for training.
     """
     df = df.dropna().drop_duplicates()
     df = remove_outliers(df, "rate", percentile=99.98)
-    df, encoders, kbins = prepare_df(df)
+    df, encoders, kbins = prepare_df(df, target_feature)
 
     save_encoders(encoders, kbins, "encoders.pkl")
 
@@ -383,13 +389,14 @@ def train_and_validate():
     """
     Train the model on training data and validate it on validation data.
     """
+    target_feature = "log_rate"
     df = pd.read_csv("dataset/train.csv")
     df_valid = pd.read_csv("dataset/validation.csv")
 
-    df = prepare_train_df(df)
+    df = prepare_train_df(df, target_feature)
     print(f"Columns: {df.columns.tolist()}\n\n")
     encoders, kbins = load_encoders("encoders.pkl")
-    df_valid, _, _ = prepare_df(df_valid, encoders, kbins)
+    df_valid, _, _ = prepare_df(df_valid, target_feature, encoders, kbins)
 
     feature_sets = {
         "all": df.columns.tolist(),
@@ -466,25 +473,24 @@ def train_and_validate():
     leader_board = {}
 
     for idx, (name, features) in enumerate(feature_sets.items()):
-        for target_feature in ["rate", "log_rate"]:
-            experiment_name = f"experiment_train_validate_{idx + 1}_{name}_{target_feature}"
-            print(
-                f"\nRunning experiment: {experiment_name} with target {target_feature} and features: {features}"
-            )
+        experiment_name = f"experiment_train_validate_{idx + 1}_{name}_{target_feature}"
+        print(
+            f"\nRunning experiment: {experiment_name} with target {target_feature} and features: {features}"
+        )
 
-            model = Model(experiment_name=experiment_name)
-            model.fit(features=features, target=target_feature, df=df, validation_df=df_valid)
+        model = Model(experiment_name=experiment_name)
+        model.fit(features=features, target=target_feature, df=df, validation_df=df_valid)
 
-            important_features = model.analyze_feature_importance(df)
+        important_features = model.analyze_feature_importance(df)
 
-            predicted_rates = model.predict(df_valid)
-            mape = loss(df_valid["rate"], predicted_rates)
-            mape = np.round(mape, 2)
+        predicted_rates = model.predict(df_valid)
+        mape = loss(df_valid["rate"], predicted_rates)
+        mape = np.round(mape, 2)
 
-            leader_board[experiment_name] = mape
+        leader_board[experiment_name] = mape
 
-            model.save_json({"MAPE": mape}, "validation_results.json")
-            print(f"Validation MAPE: {mape}%")
+        model.save_json({"MAPE": mape}, "validation_results.json")
+        print(f"Validation MAPE: {mape}%")
 
     print("\nLeaderboard:")
     for name, mape in leader_board.items():
@@ -501,21 +507,22 @@ def generate_final_solution():
     """
     Train the model on combined train and validation data and generate predictions for the test set.
     """
+    target_feature = "log_rate"
     df_train = pd.read_csv("dataset/train.csv")
-    df_train = prepare_train_df(df_train)
+    df_train = prepare_train_df(df_train, target_feature)
 
     encoders, kbins = load_encoders("encoders.pkl")
     df_valid = pd.read_csv("dataset/validation.csv")
-    df_valid, _, _ = prepare_df(df_valid, encoders, kbins)
+    df_valid, _, _ = prepare_df(df_valid, target_feature, encoders, kbins)
 
     df_full = pd.concat([df_train, df_valid]).reset_index(drop=True)
-    df_full, _, _ = prepare_df(df_full, encoders, kbins)
+    df_full, _, _ = prepare_df(df_full, target_feature, encoders, kbins)
 
     model = Model(experiment_name="experiment_final")
     model.fit(df_full, "rate", df_valid)
 
     df_test = pd.read_csv("dataset/test.csv")
-    df_test, _, _ = prepare_df(df_test, encoders, kbins)
+    df_test, _, _ = prepare_df(df_test, target_feature, encoders, kbins)
     df_test["predicted_rate"] = model.predict(df_test)
     output_path = os.path.join(model.experiment_name, "predicted.csv")
     df_test.to_csv(output_path, index=False)
