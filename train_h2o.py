@@ -355,10 +355,13 @@ def train_and_validate():
             model.save_json({"MAPE": mape}, "validation_results.json")
             print(f"Validation MAPE: {mape}%")
 
-    # find the best model
     print("\nLeaderboard:")
     for name, mape in leader_board.items():
         print(f"{name}: {mape}%")
+
+    print(
+        f"\nBest model: {min(leader_board, key=leader_board.get)} with MAPE: {min(leader_board.values())}%"
+    )
 
     return min(leader_board.values())
 
