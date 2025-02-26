@@ -16,3 +16,4 @@ tqdm~=4.67.1
 optuna
 
 h2o
+shap
