@@ -1,15 +1,14 @@
+import json
+import os
 import pickle
 from pathlib import Path
 
 import h2o
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from category_encoders import CatBoostEncoder, OneHotEncoder
 from h2o.automl import H2OAutoML
-import os
-import json
-import shap
 from sklearn.preprocessing import KBinsDiscretizer
 
 
@@ -39,6 +38,30 @@ def add_custom_features(df):
     Adds custom features like is_kma_equal and is_rate_outlier.
     """
     df["is_kma_equal"] = df["destination_kma"] == df["origin_kma"]
+
+    # Рассчитываем агрегированные метрики по парам (origin_kma, destination_kma)
+    agg_features = (
+        df.groupby(["origin_kma", "destination_kma"])
+        .agg(
+            valid_miles_min=("valid_miles", "min"),
+            valid_miles_mean=("valid_miles", "mean"),
+            valid_miles_median=("valid_miles", "median"),
+            valid_miles_max=("valid_miles", "max"),
+            rate_min=("rate", "min"),
+            # rate_mean=("rate", "mean"),
+            # rate_median=("rate", "median"),
+            # rate_max=("rate", "max"),
+            # log_rate_min=("log_rate", "min"),
+            # log_rate_mean=("log_rate", "mean"),
+            # log_rate_median=("log_rate", "median"),
+            # log_rate_max=("log_rate", "max"),
+        )
+        .reset_index()
+    )
+
+    # Добавляем эти агрегированные признаки обратно в исходный датафрейм
+    df = df.merge(agg_features, on=["origin_kma", "destination_kma"], how="left")
+
     return df
 
 
@@ -68,6 +91,7 @@ def extract_temporal_features(df, datetime_col="pickup_date"):
     df["month"] = df[datetime_col].dt.month
     df["day_of_week"] = df[datetime_col].dt.dayofweek
     df["hour"] = df[datetime_col].dt.hour
+    df["year"] = df[datetime_col].dt.year
 
     # Cyclic encoding
     df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
@@ -376,8 +400,8 @@ class Model:
 def prepare_df(df: pd.DataFrame, target_feature: str, train_encoders=None, kbins=None):
     df = extract_temporal_features(df)
     df = add_interaction_features(df)
-    df = add_custom_features(df)
     df = log_skewed_columns(df, ["valid_miles", "weight", "rate"])
+    df = add_custom_features(df)
     df, kbins = bin_features(df, ["valid_miles", "weight"], kbins=kbins)
     df, encoders = prepare_categorical_features(
         df,
@@ -404,16 +428,55 @@ def prepare_train_df(df: pd.DataFrame, target_feature: str) -> pd.DataFrame:
 
 """
 Full set of features:
-'rate', 'valid_miles', 'transport_type', 'weight', 'pickup_date',
-'origin_kma', 'destination_kma', 'month', 'day_of_week', 'hour',
-'month_sin', 'month_cos', 'day_of_week_sin', 'day_of_week_cos',
-'hour_sin', 'hour_cos', 'season', 'season_num',
-'miles_weight_interaction', 'kma_interaction', 'is_kma_equal',
-'log_valid_miles', 'log_weight', 'log_rate', 'bin_valid_miles',
-'bin_weight', 'encoded_origin_kma', 'encoded_destination_kma',
-'encoded_transport_type_1', 'encoded_transport_type_2',
-'encoded_transport_type_3', 'encoded_season_1', 'encoded_season_2',
-'encoded_season_3', 'encoded_season_4'
+rate
+valid_miles
+transport_type
+weight
+pickup_date
+origin_kma
+destination_kma
+month
+day_of_week
+hour
+year
+month_sin
+month_cos
+day_of_week_sin
+day_of_week_cos
+hour_sin
+hour_cos
+season
+season_num
+miles_weight_interaction
+kma_interaction
+log_valid_miles
+log_weight
+log_rate
+is_kma_equal
+valid_miles_min
+valid_miles_mean
+valid_miles_median
+valid_miles_max
+rate_min
+rate_mean
+rate_median
+rate_max
+log_rate_min
+log_rate_mean
+log_rate_median
+log_rate_max
+bin_valid_miles
+bin_weight
+encoded_origin_kma
+encoded_destination_kma
+encoded_transport_type_1
+encoded_transport_type_2
+encoded_transport_type_3
+encoded_season_1
+encoded_season_2
+encoded_season_3
+encoded_season_4
+
 """
 
 
@@ -426,66 +489,71 @@ def train_and_validate():
     df_valid = pd.read_csv("dataset/validation.csv")
 
     df = prepare_train_df(df, target_feature)
-    print(f"Columns: {df.columns.tolist()}\n\n")
+    print(f"Columns:\n{'\n'.join(df.columns)}\n\n")
+
     encoders, kbins = load_encoders("encoders.pkl")
     df_valid, _, _ = prepare_df(df_valid, target_feature, encoders, kbins)
 
     feature_sets = {
         "all": df.columns.tolist(),
-        "basic": ["valid_miles", "weight"],
-        "basic_log": ["log_valid_miles", "log_weight"],
-        "basic_log_transport": ["log_valid_miles", "log_weight", "transport_type"],
-        "basic_log_equal_kma": ["log_valid_miles", "log_weight", "is_kma_equal"],
-        "basic_log_transport_equal_kma": [
+        # "basic_log": {"log_valid_miles", "log_weight"},
+        # "basic_log_transport": {"log_valid_miles", "log_weight", "transport_type"},
+        # "basic_log_equal_kma": {"log_valid_miles", "log_weight", "is_kma_equal"},
+        # "basic_log_transport_equal_kma": {
+        #     "log_valid_miles",
+        #     "log_weight",
+        #     "transport_type",
+        #     "is_kma_equal",
+        # },
+        # "basic_log_transport_equal_kma_temporal": {
+        #     "log_valid_miles",
+        #     "log_weight",
+        #     "transport_type",
+        #     "is_kma_equal",
+        #     "season",
+        #     "month",
+        #     "day_of_week",
+        #     "hour",
+        # },
+        # "basic_log_transport_kma": {
+        #     "log_valid_miles",
+        #     "log_weight",
+        #     "transport_type",
+        #     "origin_kma",
+        #     "destination_kma",
+        # },
+        "favourite": {
             "log_valid_miles",
             "log_weight",
-            "transport_type",
-            "is_kma_equal",
-        ],
-        "basic_log_transport_equal_kma_temporal": [
-            "log_valid_miles",
-            "log_weight",
-            "transport_type",
-            "is_kma_equal",
-            "season",
+            "bin_valid_miles",
+            "bin_weight",
+            "hour",
             "month",
             "day_of_week",
-            "hour",
-        ],
-        "basic_log_transport_kma": [
+            "encoded_season_1",
+            "encoded_season_2",
+            "encoded_season_3",
+            "encoded_season_4",
+            "valid_miles_min",
+            "valid_miles_mean",
+            "valid_miles_median",
+            "valid_miles_max",
+            "encoded_transport_type_1",
+            "encoded_transport_type_2",
+            "encoded_transport_type_3",
+        },
+        "basic_log_transport_kma_temporal": {
             "log_valid_miles",
             "log_weight",
             "transport_type",
             "origin_kma",
             "destination_kma",
-        ],
-        "basic_log_transport_kma_temporal": [
-            "log_valid_miles",
-            "log_weight",
-            "transport_type",
-            "origin_kma",
-            "destination_kma",
-            "season",
+            "season_num",
             "month",
             "day_of_week",
             "hour",
-        ],
-        "everything": [
-            "valid_miles",
-            "weight",
-            "transport_type",
-            "month",
-            "day_of_week",
-            "hour",
-            "origin_kma",
-            "destination_kma",
-            "is_kma_equal",
-            "season",
-            "month",
-            "day_of_week",
-            "hour",
-        ],
-        "everything_log": [
+        },
+        "everything_log": {
             "log_valid_miles",
             "log_weight",
             "transport_type",
@@ -495,11 +563,10 @@ def train_and_validate():
             "origin_kma",
             "destination_kma",
             "is_kma_equal",
-            "season",
-            "month",
+            "season_num",
             "day_of_week",
             "hour",
-        ],
+        },
     }
 
     leader_board = {}
