@@ -262,10 +262,13 @@ class Model:
             ).sort_values("shap_importance", ascending=False)
 
             importance_df.to_csv(self.experiment_dir / "shap_feature_importance.csv", index=False)
+            print(
+                f"SHAP feature importance saved at: {self.experiment_dir / 'shap_feature_importance.csv'}"
+            )
             return importance_df["feature"].tolist()
         except Exception as e:
             print("SHAP not supported:", e)
-            return self.leader.varimp(use_pandas=True)["variable"].tolist()
+            return []
 
     def predict(self, df):
         """
