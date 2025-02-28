@@ -194,13 +194,15 @@ class Model:
         # Run H2O AutoML
         self.aml = H2OAutoML(
             project_name=self.experiment_name,
-            max_models=1,
+            max_models=5,
+            max_runtime_secs_per_model=60 * 25,
             seed=42,
             sort_metric="MAE",
             stopping_metric="MAE",
             exclude_algos=[
                 "DeepLearning",
-                # "StackedEnsemble"
+                "StackedEnsemble",
+                "DRF",
             ],
         )
 
