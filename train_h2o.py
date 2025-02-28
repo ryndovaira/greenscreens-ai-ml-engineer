@@ -33,37 +33,6 @@ def remove_outliers(df, column, percentile=99.98):
     return df
 
 
-def add_custom_features(df):
-    """
-    Adds custom features like is_kma_equal and is_rate_outlier.
-    """
-    df["is_kma_equal"] = df["destination_kma"] == df["origin_kma"]
-
-    # Рассчитываем агрегированные метрики по парам (origin_kma, destination_kma)
-    agg_features = (
-        df.groupby(["origin_kma", "destination_kma"])
-        .agg(
-            valid_miles_min=("valid_miles", "min"),
-            valid_miles_mean=("valid_miles", "mean"),
-            valid_miles_median=("valid_miles", "median"),
-            valid_miles_max=("valid_miles", "max"),
-            rate_min=("rate", "min"),
-            # rate_mean=("rate", "mean"),
-            # rate_median=("rate", "median"),
-            # rate_max=("rate", "max"),
-            # log_rate_min=("log_rate", "min"),
-            # log_rate_mean=("log_rate", "mean"),
-            # log_rate_median=("log_rate", "median"),
-            # log_rate_max=("log_rate", "max"),
-        )
-        .reset_index()
-    )
-
-    # Добавляем эти агрегированные признаки обратно в исходный датафрейм
-    df = df.merge(agg_features, on=["origin_kma", "destination_kma"], how="left")
-
-    return df
-
 
 def log_skewed_columns(df, columns):
     """
@@ -613,7 +582,6 @@ def generate_final_solution():
     df_valid, _, _ = prepare_df(df_valid, target_feature, encoders, kbins)
 
     df_full = pd.concat([df_train, df_valid]).reset_index(drop=True)
-    df_full, _, _ = prepare_df(df_full, target_feature, encoders, kbins)
 
     model = Model(experiment_name="experiment_final")
     model.fit(df_full, "rate", df_valid)
