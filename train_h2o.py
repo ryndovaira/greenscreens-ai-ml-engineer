@@ -607,7 +607,7 @@ if __name__ == "__main__":
     print(f"Accuracy of validation is {mape}%")
 
     if mape < 9:
-        generate_final_solution()
+        # generate_final_solution()
         print("'predicted.csv' is generated, please send it to us")
     else:
         print("MAPE >= 9%. Consider tuning the model further.")
