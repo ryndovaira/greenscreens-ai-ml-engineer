@@ -376,7 +376,6 @@ def prepare_df(df: pd.DataFrame, target_feature: str, train_encoders=None, kbins
     df = extract_temporal_features(df)
     df = add_interaction_features(df)
     df = log_skewed_columns(df, ["valid_miles", "weight", "rate"])
-    df = add_custom_features(df)
     df, kbins = bin_features(df, ["valid_miles", "weight"], kbins=kbins)
     df, encoders = prepare_categorical_features(
         df,
