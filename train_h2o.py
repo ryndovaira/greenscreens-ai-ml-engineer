@@ -33,7 +33,6 @@ def remove_outliers(df, column, percentile=99.98):
     return df
 
 
-
 def log_skewed_columns(df, columns):
     """
     Log transform skewed columns.
