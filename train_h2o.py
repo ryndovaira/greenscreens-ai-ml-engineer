@@ -542,6 +542,7 @@ def train_and_validate():
     leader_board = {}
 
     for idx, (name, features) in enumerate(feature_sets.items()):
+        features = sorted(list(features))
         experiment_name = f"experiment_train_validate_{idx + 1}_{name}_{target_feature}"
         print(
             f"\nRunning experiment: {experiment_name} with target {target_feature} and features: {features}"
