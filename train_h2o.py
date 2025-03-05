@@ -450,105 +450,45 @@ def train_and_validate():
     """
     Train the model on training data and validate it on validation data.
     """
-    target_feature = "log_rate"
+    target_name = "log_rate"
     df = pd.read_csv("dataset/train.csv")
     df_valid = pd.read_csv("dataset/validation.csv")
 
-    df = prepare_train_df(df, target_feature)
+    df = prepare_train_df(df, target_name)
     print(f"Columns:\n{'\n'.join(df.columns)}\n\n")
 
     encoders, kbins = load_encoders("encoders.pkl")
-    df_valid, _, _ = prepare_df(df_valid, target_feature, encoders, kbins)
+    df_valid, _, _ = prepare_df(df_valid, target_name, encoders, kbins)
     print(f"Validation columns:\n{'\n'.join(df_valid.columns)}\n\n")
 
     print(f"Columns diff:\n{set(df.columns) - set(df_valid.columns)}\n\n")
 
-    feature_sets = {
-        "all": df.drop(["rate", "log_rate"], axis=1).columns.tolist(),
-        # "basic_log": {"log_valid_miles", "log_weight"},
-        # "basic_log_transport": {"log_valid_miles", "log_weight", "transport_type"},
-        # "basic_log_equal_kma": {"log_valid_miles", "log_weight", "is_kma_equal"},
-        # "basic_log_transport_equal_kma": {
-        #     "log_valid_miles",
-        #     "log_weight",
-        #     "transport_type",
-        #     "is_kma_equal",
-        # },
-        # "basic_log_transport_equal_kma_temporal": {
-        #     "log_valid_miles",
-        #     "log_weight",
-        #     "transport_type",
-        #     "is_kma_equal",
-        #     "season",
-        #     "month",
-        #     "day_of_week",
-        #     "hour",
-        # },
-        # "basic_log_transport_kma": {
-        #     "log_valid_miles",
-        #     "log_weight",
-        #     "transport_type",
-        #     "origin_kma",
-        #     "destination_kma",
-        # },
-        "favourite": {
-            "log_valid_miles",
-            "log_weight",
-            "bin_valid_miles",
-            "bin_weight",
-            "hour",
-            "month",
+    experiment_features = {
+        "exp_1": {
             "day_of_week",
-            "encoded_season_1",
-            "encoded_season_2",
-            "encoded_season_3",
-            "encoded_season_4",
-            "valid_miles_min",
-            "valid_miles_mean",
-            "valid_miles_median",
-            "valid_miles_max",
-            "encoded_transport_type_1",
-            "encoded_transport_type_2",
-            "encoded_transport_type_3",
-        },
-        "basic_log_transport_kma_temporal": {
-            "log_valid_miles",
-            "log_weight",
-            "transport_type",
-            "origin_kma",
             "destination_kma",
-            "season_num",
-            "month",
-            "day_of_week",
             "hour",
-        },
-        "everything_log": {
             "log_valid_miles",
             "log_weight",
-            "transport_type",
             "month",
-            "day_of_week",
-            "hour",
             "origin_kma",
-            "destination_kma",
-            "is_kma_equal",
-            "season_num",
-            "day_of_week",
-            "hour",
+            "pickup_date",
+            "transport_type",
+            "year",
         },
     }
 
     leader_board = {}
 
-    for idx, (name, features) in enumerate(feature_sets.items()):
+    for idx, (name, features) in enumerate(experiment_features.items()):
         features = sorted(list(features))
-        experiment_name = f"experiment_train_validate_{idx + 1}_{name}_{target_feature}"
+        experiment_name = f"experiment_train_validate_{idx + 1}_{name}_{target_name}"
         print(
-            f"\nRunning experiment: {experiment_name} with target {target_feature} and features: {features}"
+            f"\nRunning experiment: {experiment_name} with target {target_name} and features: {features}"
         )
 
         model = Model(experiment_name=experiment_name)
-        model.fit(features=features, target=target_feature, df=df, validation_df=df_valid)
+        model.fit(features=features, target=target_name, df=df, validation_df=df_valid)
 
         important_features = model.analyze_feature_importance(df)
         print(f"Important features: {important_features}")
